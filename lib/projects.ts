@@ -198,7 +198,7 @@ export type ConceptArticle = {
 /**
  * 知识点：一句话说清这个方法干什么。
  * `note` 是可选的补充，界面上在条目右侧显示一个灯泡图标，悬停（手机上点一下）浮出气泡；
- * 只在确实需要时写（Python 对应物、常见坑等），尽量短。
+ * 只在确实需要时写（与官方文档写法的差异、常见坑等），尽量短。
  */
 export type Concept = {
   text: string;
@@ -265,16 +265,20 @@ export const INIT_STEPS: CommandStep[] = [
     command: `mkdir ${PROJECT_DIR} && cd ${PROJECT_DIR}`,
   },
   {
-    description: "用 uv 初始化 Python 3.12 项目。",
-    command: "uv init --python 3.12",
+    description: "初始化 Node 项目，并把包类型设成 ESM（脚本里要用 import 与顶层 await）。",
+    command: "pnpm init && pnpm pkg set type=module",
   },
   {
-    description: "装 Deep Agents 与 DeepSeek 模型包。",
-    command: "uv add deepagents langchain-deepseek",
+    description: "装 Deep Agents、LangChain、LangGraph、DeepSeek 模型包，以及读 .env.local 用的 dotenv。",
+    command: "pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek dotenv",
   },
   {
-    description: "建语料目录：调研任务要读的材料放在这里。",
-    command: "mkdir -p content",
+    description: "装跑 TypeScript 脚本用的开发依赖。",
+    command: "pnpm add -D typescript tsx @types/node",
+  },
+  {
+    description: "建语料与源码目录：调研任务要读的材料放在 content/。",
+    command: "mkdir -p content src",
   },
   {
     description: "在项目根目录创建 .env.local，填入 DeepSeek 的 API Key。",
@@ -294,8 +298,8 @@ export const NAV_ITEMS: NavItem[] = [
         href: "https://docs.langchain.com/oss/python/deepagents/overview",
       },
       {
-        title: "uv 使用说明",
-        href: "https://docs.astral.sh/uv/",
+        title: "pnpm 使用说明",
+        href: "https://pnpm.io/zh/cli/add",
       },
     ],
     files: [
@@ -308,27 +312,47 @@ export const NAV_ITEMS: NavItem[] = [
         hint: "ChatDeepSeek 从环境变量 DEEPSEEK_API_KEY 读 Key，这里只写这一行：",
         code: `DEEPSEEK_API_KEY=sk-...`,
       },
+      {
+        path: "tsconfig.json",
+        hint: "新建：让 tsx 能跑 TS 脚本，ESM 与顶层 await 都放开。",
+        code: `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}`,
+      },
     ],
   },
   {
     kind: "project",
     slug: "from-graph-to-agent",
-    title: "从手写图到 create_deep_agent",
-    menuTitle: "起点对照",
+    title: "一行拿到配好的 agent：它默认给了什么",
+    menuTitle: "它是什么",
     summary:
-      "先把基线摆出来：同样的任务，手写版要自己接模型、接工具、写路由；这一课换成一行拿到配好的 agent，看清它到底省了什么、又多了什么。",
+      "手写版要自己接模型、接工具、写循环；这一课换成一行拿到配好的 agent，把默认行为看清楚 —— 文件工具与派活工具是自带的，待办要自己挂上去。",
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.minimal",
-        "打印出一条完整回答；消息序列里能看到内置工具被自动调用",
+        "在 my-deepagents-app 目录执行 pnpm tsx src/minimal.ts",
+        "打印出每一步的工具调用与最终待办，能看到 write_todos 与写文件都被调用过",
       ],
     },
     concepts: [
       {
-        text: "`create_deep_agent` — 拿到一个已配置好的 agent：模型、内置工具、系统提示都由它装好",
+        text: "`createDeepAgent` — 拿到一个已配置好的 agent：模型、内置工具、系统提示都由它装好",
       },
       { text: "`invoke` — 跑一次 agent，输入输出都是消息列表（底层就是 LangGraph 的图）" },
+      {
+        text: "`todoListMiddleware` — 待办中间件：装上才给 agent 待办工具，默认并不带",
+      },
+      { text: "`write_todos` — 待办工具：长任务里把进度外置成清单，逐条打勾" },
     ],
     conceptArticle: {
       title: "Deep Agents 是什么：与 LangGraph、编排平台的分工",
@@ -373,32 +397,55 @@ export const NAV_ITEMS: NavItem[] = [
     },
     files: [
       {
-        path: "src/minimal.py",
+        path: "src/minimal.ts",
         order: 1,
         action: "create",
-        hint: "最小示例：一个模型 + 一个任务，先看默认行为。",
-        code: `import os
-from pathlib import Path
+        hint: "最小示例：一个模型 + 一个任务，看默认行为与工具调用痕迹。",
+        code: `import dotenv from "dotenv";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { createDeepAgent } from "deepagents";
+import { todoListMiddleware } from "langchain";
 
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
+// 脚本是裸 Node 进程，环境变量自己读
+dotenv.config({ path: ".env.local" });
 
-# 脚本是裸 Python 进程，环境变量自己读
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
+const model = new ChatDeepSeek({
+  model: "deepseek-chat",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
 
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
+// 手写版要自己接模型、接工具、写循环；这里一行拿到配好的 agent
+// 默认自带：模型与工具循环、文件系统工具（write_file / read_file / ls）、
+// 以及有 subagents 时派活用的 task；待办不在默认配置里，要显式挂中间件
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  middleware: [todoListMiddleware()],
+});
 
-# 手写版要自己写 llmCall / toolNode / route 三件套；这里一行拿到配好的 agent
-agent = create_deep_agent(model=model, tools=[])
+// 任务必须真的需要拆解，待办清单才有意义
+const result = await agent.invoke({
+  messages: [
+    {
+      role: "user",
+      content:
+        "读完 content/ 下的三份材料，写一份对比报告到 report.md，每个结论都标出处",
+    },
+  ],
+});
 
-# 输入输出都是消息列表：底层就是一张 LangGraph 图
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "比较三种切块策略的取舍"}]}
-)
+// 内置工具在消息里留下痕迹：哪一步用了哪个工具、参数是什么
+for (const message of result.messages) {
+  if (!("tool_calls" in message)) continue;
+  for (const call of message.tool_calls ?? []) {
+    console.log(call.name, call.args);
+  }
+}
 
-for message in result["messages"]:
-    print(message.type, str(message.content)[:120])
+// 待办是状态字段：每次调用 write_todos 都覆盖成最新一版
+console.log("最终待办：", result.todos);
+// 虚拟文件是另一个状态字段：路径 → 内容
+console.log("产出文件：", Object.keys(result.files ?? {}));
 `,
       },
     ],
@@ -415,200 +462,70 @@ for message in result["messages"]:
   },
   {
     kind: "project",
-    slug: "builtin-tools",
-    title: "内置工具：默认给了哪些家伙什",
-    menuTitle: "内置工具",
-    summary:
-      "默认装好的工具不是随手加的：文件四件套解决「产物往哪放」，待办工具解决「进度往哪记」。这一课先把消息序列里的工具调用看清楚。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.tools_demo",
-        "打印出每次工具调用的名字与参数，能看到写文件与读文件成对出现",
-      ],
-    },
-    concepts: [
-      { text: "`write_file` — 把内容写进虚拟文件，产物不再占用上下文" },
-      { text: "`read_file` — 按需把文件片段读回上下文" },
-      { text: "`edit_file` — 局部修改已有文件，而不是整份重写" },
-      { text: "`ls` — 列出虚拟文件，确认当前有哪些产物" },
-    ],
-    files: [
-      {
-        path: "src/tools_demo.py",
-        order: 1,
-        action: "create",
-        hint: "跑一个会产出文件的任务，把工具调用逐条打印出来。",
-        code: `import os
-from pathlib import Path
-
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
-
-agent = create_deep_agent(model=model, tools=[])
-
-result = agent.invoke(
-    {
-        "messages": [
-            {
-                "role": "user",
-                "content": "把三份材料的要点分别写进 notes-1.md、notes-2.md、notes-3.md，再列出目录",
-            }
-        ]
-    }
-)
-
-# 内置工具在消息里留下痕迹：write_file / read_file / edit_file / ls
-for message in result["messages"]:
-    for call in getattr(message, "tool_calls", None) or []:
-        print(call["name"], call["args"])
-
-# 状态里能直接看到产出的文件
-print("文件：", list((result.get("files") or {}).keys()))
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "Deep Agents 内置工具",
-        href: "https://docs.langchain.com/oss/python/deepagents/overview",
-      },
-      {
-        title: "LangChain 工具",
-        href: "https://docs.langchain.com/oss/python/langchain/tools",
-      },
-    ],
-  },
-  {
-    kind: "project",
-    slug: "planning",
-    title: "Planning：长任务不跑偏",
-    menuTitle: "Planning",
-    summary:
-      "长任务最容易出的问题不是「做错」，而是「做着做着忘了要做什么」。这一课看待办清单怎么生成、怎么更新，以及它什么时候会失效。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.minimal",
-        "打印出待办清单的每一版：能看到条目被逐条完成，而不是列完就不动",
-      ],
-    },
-    concepts: [
-      { text: "`write_todos` — 模型用来生成与更新待办清单的工具" },
-      { text: "`todos` — 状态里存放待办清单的字段，逐条带状态（待办 / 进行中 / 完成）" },
-    ],
-    files: [
-      {
-        path: "src/minimal.py",
-        order: 1,
-        action: "replace",
-        hint: "覆盖成「需要拆解」的任务，并打印待办清单的每一版。",
-        code: `import os
-from pathlib import Path
-
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
-
-agent = create_deep_agent(model=model, tools=[])
-
-# 这一步容易被跳过：任务必须真的需要拆解，清单才有意义
-result = agent.invoke(
-    {
-        "messages": [
-            {
-                "role": "user",
-                "content": "读完 content/ 下的三份材料，写一份对比报告到 report.md，并要求每个结论都标出处",
-            }
-        ]
-    }
-)
-
-# 待办清单是状态字段：模型每次调用 write_todos 都会覆盖成最新一版
-for message in result["messages"]:
-    for call in getattr(message, "tool_calls", None) or []:
-        if call["name"] == "write_todos":
-            print(call["args"])
-
-print("最终清单：", result.get("todos"))
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "Deep Agents 规划",
-        href: "https://docs.langchain.com/oss/python/deepagents/overview",
-      },
-      {
-        title: "LangChain 中间件",
-        href: "https://docs.langchain.com/oss/python/langchain/middleware",
-      },
-    ],
-  },
-  {
-    kind: "project",
     slug: "virtual-filesystem",
-    title: "虚拟文件系统：为什么用文件代替上下文",
-    menuTitle: "文件系统",
+    title: "上下文工程：用文件代替上下文",
+    menuTitle: "上下文工程",
     summary:
-      "上下文不是仓库，是工作台。这一课把大产物写进虚拟文件，只把需要的片段读回来，并对比两种做法的输入规模。",
+      "长任务真正会爆的是上下文。这一课把大产物写进虚拟文件、只读回需要的片段，再用中间件把历史压掉 —— 这是它最核心的一招。",
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.minimal",
-        "打印出虚拟文件清单与两次运行为模型提供的输入规模，写文件那次的输入明显更小",
+        "在 my-deepagents-app 目录执行 pnpm tsx src/minimal.ts",
+        "打印出虚拟文件清单与消息规模，产物文件进了状态而不是留在对话里",
       ],
     },
     concepts: [
+      { text: "`write_file` — 内置工具：把内容写进虚拟文件，产物不再占着上下文" },
+      { text: "`read_file` — 内置工具：按需把文件片段读回上下文" },
       { text: "`files` — 状态里存放虚拟文件的字段：路径到内容的映射，跨轮持久" },
+      {
+        text: "`middleware` — createDeepAgent 的参数：在模型调用与工具调用前后挂钩子",
+      },
     ],
     files: [
       {
-        path: "src/minimal.py",
+        path: "src/minimal.ts",
         order: 1,
         action: "replace",
-        hint: "覆盖成两段对照：先把产物写文件，再只读回需要的片段。",
-        code: `import os
-from pathlib import Path
+        hint: "覆盖成一次任务里写完再读回：产物进文件，只把需要的片段带进上下文。",
+        code: `import dotenv from "dotenv";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { createDeepAgent } from "deepagents";
+import { todoListMiddleware } from "langchain";
 
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
+dotenv.config({ path: ".env.local" });
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
+const model = new ChatDeepSeek({
+  model: "deepseek-chat",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
 
-agent = create_deep_agent(model=model, tools=[])
+// middleware 是横切面：模型调用前后、工具调用前后都能挂钩子
+// 摘要类中间件（langchain 的 summarizationMiddleware）也挂这里，参数按官方文档配
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  middleware: [todoListMiddleware()],
+});
 
-# ① 产物写进虚拟文件：文件内容留在状态里，不进 prompt
-first = agent.invoke(
+// 一次任务里走完：先 write_file 存进状态，再 read_file 只取回需要的那一段
+const result = await agent.invoke({
+  messages: [
     {
-        "messages": [
-            {
-                "role": "user",
-                "content": "读 content/ 下的材料，把每篇的要点写进 summary-1.md，不要复述原文",
-            }
-        ]
-    }
-)
-print("文件：", list((first.get("files") or {}).keys()))
+      role: "user",
+      content:
+        "读 content/ 下的材料，把每篇要点写进 summary-1.md，再只读这份文件写出三句话摘要",
+    },
+  ],
+});
 
-# ② 第二轮只读回需要的那一份：上下文里只有片段，没有全文
-second = agent.invoke(
-    {
-        "messages": [
-            {"role": "user", "content": "只读 summary-1.md，用三句话写一份摘要"}
-        ]
-    }
-)
-print("第二轮输入规模：", sum(len(str(m.content)) for m in second["messages"]))
+// files 是状态字段：路径 → 内容，产物不再堆在对话里
+console.log("文件：", Object.keys(result.files ?? {}));
+console.log("消息数：", result.messages.length);
+console.log(
+  "输入规模：",
+  result.messages.reduce((total, message) => total + String(message.content).length, 0),
+);
 `,
       },
     ],
@@ -625,67 +542,189 @@ print("第二轮输入规模：", sum(len(str(m.content)) for m in second["messa
   },
   {
     kind: "project",
-    slug: "subagents",
-    title: "Subagents：把活分出去，也把上下文隔开",
-    menuTitle: "子 agent",
+    slug: "backends",
+    title: "后端：文件到底存在哪",
+    menuTitle: "后端",
     summary:
-      "子 agent 的价值不在「多一个大脑」，而在上下文隔离与权限收窄：各干各的，互不污染，只给它该有的工具。",
+      "上一课只说了「写进文件」，没说文件存在哪。默认的 StateBackend 跟着 thread 活，脚本一结束就没了；要让产物落到真实磁盘，得换 backend。",
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.subagents",
-        "消息里能看到主 agent 通过子任务把查资料与写稿分开，子 agent 的工具集各不相同",
+        "在 my-deepagents-app 目录执行 pnpm tsx src/backends.ts",
+        "workspace/ 目录下出现 notes.md，状态里只剩内部产物，两者分开存放",
       ],
     },
     concepts: [
-      { text: "`subagents` — create_deep_agent 的参数：声明可被派活的子 agent 名单" },
+      { text: "`backend` — createDeepAgent 的参数：文件工具最终写到哪，由它决定" },
+      { text: "`StateBackend` — 默认后端：文件存在图状态里，跟 thread 走，不落盘" },
+      {
+        text: "`FilesystemBackend` — 读写真实磁盘：rootDir 指目录，virtualMode 把路径限制在目录内",
+      },
+      {
+        text: "`CompositeBackend` — 按路径前缀分发：第一个参数是默认后端，第二个是路由表",
+      },
+      { text: "`virtualMode` — 路径沙箱开关：默认 false 等于没有保护，配 rootDir 必须开" },
+      {
+        text: "`StoreBackend` — 把文件存进 Store：跨 thread 持久，适合长期记忆",
+        note: "构造时传 stateAndStore 与 namespace",
+      },
+      {
+        text: "`LocalShellBackend` — 本地 shell 后端：能执行命令，但没有隔离，只适合开发",
+      },
+      {
+        text: "`SandboxBackendProtocol` — 沙箱后端协议：实现后自动多出 execute 工具",
+        note: "在隔离环境里跑命令，生产环境用",
+      },
+    ],
+    files: [
+      {
+        path: "src/backends.ts",
+        order: 1,
+        action: "create",
+        hint: "换成 CompositeBackend：工作区落真实磁盘，内部产物留在状态里。",
+        code: `import { mkdirSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+
+import dotenv from "dotenv";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import {
+  CompositeBackend,
+  FilesystemBackend,
+  StateBackend,
+  createDeepAgent,
+} from "deepagents";
+
+dotenv.config({ path: ".env.local" });
+
+const model = new ChatDeepSeek({
+  model: "deepseek-chat",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
+
+// 不传 backend 时用的就是 StateBackend：文件存在图状态里，换了 thread 或重启就没了
+// 要让产物真正落盘，换 FilesystemBackend；rootDir 用绝对路径，virtualMode 才做路径约束
+const workspace = resolve("workspace");
+mkdirSync(workspace, { recursive: true });
+
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  // 为什么不直接把 FilesystemBackend 丢给 agent：
+  // agent 还会把内部产物（大工具结果、对话历史）写进 backend，
+  // 这些不该混进项目目录，所以默认后端留 StateBackend，只把 /workspace/ 路由到磁盘
+  backend: new CompositeBackend(new StateBackend(), {
+    "/workspace/": new FilesystemBackend({
+      rootDir: workspace,
+      virtualMode: true,
+    }),
+  }),
+});
+
+const result = await agent.invoke({
+  messages: [
+    { role: "user", content: "把三份材料的要点写进 /workspace/notes.md" },
+  ],
+});
+
+// 状态里剩下的只是内部产物；真正的笔记已经写到磁盘
+console.log("状态里的文件：", Object.keys(result.files ?? {}));
+console.log("磁盘上的文件：", readdirSync(workspace));
+
+// 跨 thread 的长期记忆换成 StoreBackend：构造时传 stateAndStore 与 namespace
+
+// 需要 agent 执行命令时，把默认后端换成 LocalShellBackend：能跑 shell，
+// 但没有隔离（命令能碰到宿主机的任意路径），只适合本地开发
+// 生产用实现 SandboxBackendProtocol 的沙箱后端：工具集会自动多出 execute，
+// 命令在隔离环境里跑，搞坏了也波及不到宿主机
+`,
+      },
+    ],
+    docLinks: [
+      {
+        title: "Deep Agents 后端",
+        href: "https://docs.langchain.com/oss/python/deepagents/backends",
+      },
+      {
+        title: "LangGraph 持久化",
+        href: "https://docs.langchain.com/oss/python/langgraph/persistence",
+      },
+    ],
+  },
+  {
+    kind: "project",
+    slug: "subagents",
+    title: "子 agent：隔离上下文，也能同时开几路",
+    menuTitle: "子 agent",
+    summary:
+      "子 agent 的价值不在「多一个大脑」，而在上下文隔离与权限收窄：各干各的、互不污染。互不依赖的子任务还能在同一轮同时开出去。",
+    verify: {
+      label: "跑脚本看结果",
+      description: [
+        "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
+        "打印出子任务调用数与产出文件，同一轮里能看到多个 task 调用",
+      ],
+    },
+    concepts: [
+      { text: "`subagents` — createDeepAgent 的参数：声明可被派活的子 agent 名单" },
+      {
+        text: "`SubAgent` — 子 agent 的规格类型：name、description、systemPrompt、tools",
+      },
       { text: "`task` — 主 agent 派活的工具：把子任务连同上下文一起交给某个子 agent" },
     ],
     files: [
       {
-        path: "src/subagents.py",
+        path: "src/subagents.ts",
         order: 1,
         action: "create",
-        hint: "定义两个子 agent：一个只查资料，一个只写稿。",
-        code: `import os
-from pathlib import Path
+        hint: "定义两个子 agent：一个只查资料，一个只写稿；任务拆成三路同时派出去。",
+        code: `import dotenv from "dotenv";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { type SubAgent, createDeepAgent } from "deepagents";
 
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
+dotenv.config({ path: ".env.local" });
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
+const model = new ChatDeepSeek({
+  model: "deepseek-chat",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
 
-# ① 子 agent 各自的边界：做什么、能碰哪些工具
-researcher = {
-    "name": "researcher",
-    "description": "只负责读 content/ 下的材料并提炼要点，不写报告",
-    "system_prompt": "读材料、提炼要点，产出放进 notes.md；不做总结陈词。",
-    "tools": [],
-}
+// ① 子 agent 各自的边界：做什么、能碰哪些工具
+const researcher: SubAgent = {
+  name: "researcher",
+  description: "只读被指定的那一份材料，把要点写进独立文件",
+  systemPrompt: "只处理被指定的那一份材料，产出独立的 notes 文件；不做总结陈词。",
+  tools: [],
+};
 
-writer = {
-    "name": "writer",
-    "description": "只负责根据 notes.md 写出带出处的报告",
-    "system_prompt": "只依据 notes.md 写作，每个结论都标出来源文件。",
-    "tools": [],
-}
+const writer: SubAgent = {
+  name: "writer",
+  description: "只根据 notes 文件写出带出处的报告",
+  systemPrompt: "只依据 notes 文件写作，每个结论都标出来源文件。",
+  tools: [],
+};
 
-# ② 主 agent 通过 task 把活分出去；上下文按子 agent 隔离
-agent = create_deep_agent(model=model, tools=[], subagents=[researcher, writer])
+// ② 主 agent 通过 task 派活：每个子 agent 有自己的上下文，只带该有的工具
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  subagents: [researcher, writer],
+});
 
-result = agent.invoke(
+// ③ 三份材料互不依赖：模型会在同一轮里返回多个 task 调用，底层并行执行
+const result = await agent.invoke({
+  messages: [
     {
-        "messages": [
-            {"role": "user", "content": "读材料后写一份报告到 report.md，要求带出处"}
-        ]
-    }
-)
+      role: "user",
+      content: "分别读三份材料，各写一份 notes 文件，最后合并成 report.md",
+    },
+  ],
+});
 
-for message in result["messages"]:
-    for call in getattr(message, "tool_calls", None) or []:
-        print(call["name"], str(call["args"])[:80])
+const calls = result.messages.flatMap((message) =>
+  "tool_calls" in message ? message.tool_calls ?? [] : [],
+);
+console.log("子任务调用数：", calls.filter((call) => call.name === "task").length);
+console.log("产出文件：", Object.keys(result.files ?? {}));
 `,
       },
     ],
@@ -702,193 +741,73 @@ for message in result["messages"]:
   },
   {
     kind: "project",
-    slug: "parallel-subagents",
-    title: "并行子 agent：同一轮同时开几路",
-    menuTitle: "并行",
-    summary:
-      "互不依赖的子任务没有理由排队。这一课让主 agent 在同一轮派出多个子任务，并说明底层的并行机制与合并要求。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.subagents",
-        "打印出同一轮里的多个子任务调用，且最终产物包含全部来源",
-      ],
-    },
-    concepts: [
-      { text: "`Send` — 底层机制：同一轮为每个子任务生成一次调用，多路并行执行" },
-    ],
-    files: [
-      {
-        path: "src/subagents.py",
-        order: 1,
-        action: "replace",
-        hint: "覆盖成多路调研：一次派三个子任务，再汇总。",
-        code: `import os
-from pathlib import Path
-
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
-
-researcher = {
-    "name": "researcher",
-    "description": "读一份材料并提炼要点到独立文件",
-    "system_prompt": "只处理被指定的那一份材料，产出独立的 notes 文件。",
-    "tools": [],
-}
-
-agent = create_deep_agent(model=model, tools=[], subagents=[researcher])
-
-# 三个子任务互不依赖：底层按同一轮派发（等价于为每个任务生成一次 Send 调用）
-result = agent.invoke(
-    {
-        "messages": [
-            {
-                "role": "user",
-                "content": "分别读三份材料，各写一份 notes 文件，最后合并成 report.md",
-            }
-        ]
-    }
-)
-
-calls = [c for m in result["messages"] for c in (getattr(m, "tool_calls", None) or [])]
-print("子任务调用数：", len([c for c in calls if c["name"] == "task"]))
-print("产出文件：", list((result.get("files") or {}).keys()))
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "Deep Agents 概览",
-        href: "https://docs.langchain.com/oss/python/deepagents/overview",
-      },
-      {
-        title: "LangGraph 并行",
-        href: "https://docs.langchain.com/oss/python/langgraph/graph-api",
-      },
-    ],
-  },
-  {
-    kind: "project",
-    slug: "middleware",
-    title: "中间件：上下文怎么裁，由钩子说了算",
-    menuTitle: "中间件",
-    summary:
-      "长对话迟早会撑爆上下文。与其祈祷提示词管用，不如把「什么时候摘要、保留什么」写成可配置的钩子。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.subagents",
-        "多轮之后模型收到的输入不随轮数线性增长，且关键事实仍在回答里",
-      ],
-    },
-    concepts: [
-      {
-        text: "`middleware` — create_deep_agent 的参数：在模型调用与工具调用前后挂钩子",
-      },
-    ],
-    files: [
-      {
-        path: "src/subagents.py",
-        order: 1,
-        action: "replace",
-        hint: "覆盖成挂中间件：摘要压历史，另加一个只做记录的钩子。",
-        code: `import os
-from pathlib import Path
-
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
-
-# 中间件是横切面：模型调用前后、工具调用前后都能挂
-# 摘要类中间件负责把过长的历史压掉；具体类名以官方文档为准
-agent = create_deep_agent(model=model, tools=[], middleware=[])
-
-# 连续多轮：观察输入规模是否随轮数线性膨胀
-state = {"messages": [{"role": "user", "content": "先记住：报告要求带出处"}]}
-for turn in range(6):
-    state["messages"].append({"role": "user", "content": f"第 {turn + 1} 轮：补充一条要点"})
-    result = agent.invoke(state)
-    state["messages"] = result["messages"]
-    size = sum(len(str(m.content)) for m in state["messages"])
-    print("轮次", turn + 1, "输入规模", size)
-
-print("关键事实仍在：", any("出处" in str(m.content) for m in state["messages"]))
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "LangChain 中间件",
-        href: "https://docs.langchain.com/oss/python/langchain/middleware",
-      },
-      {
-        title: "上下文管理",
-        href: "https://docs.langchain.com/oss/python/langchain/short-term-memory",
-      },
-    ],
-  },
-  {
-    kind: "project",
     slug: "memory-and-hitl",
-    title: "记忆与人在环：把底层能力接进来",
+    title: "记忆与审批：把底层能力接进来",
     menuTitle: "记忆与审批",
     summary:
-      "checkpointer、Store、interrupt 都不是这一层发明的，是底层图的能力。这一课把它们接到 deep agent 上，并说明重跑幂等的要求。",
+      "checkpointer、Store、interrupt 都不是这一层发明的，是底层图的能力。这一课把它们接到 deep agent 上，并收尾：什么任务值得上这套架构。",
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.subagents",
-        "写文件前挂起并等待批准；批准后继续，换了 thread 仍记得上一次的偏好",
+        "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
+        "写文件前挂起并等待批准；批准后继续，换一条 thread 仍记得上一次的偏好",
       ],
     },
     concepts: [
       { text: "`checkpointer` — 按 thread 保存每一步状态，支持续跑与恢复" },
       { text: "`store` — 跨 thread 的长期记忆，节点与工具都能读写" },
-      { text: "`interrupt` — 让图在执行中途停下来等人，再带着答复继续" },
+      {
+        text: "`interruptOn` — 按工具名配置人工确认：调用前挂起，等人答复再继续",
+        note: "必须同时给 checkpointer，否则无处保存挂起状态",
+      },
     ],
     files: [
       {
-        path: "src/subagents.py",
+        path: "src/subagents.ts",
         order: 1,
         action: "replace",
-        hint: "覆盖成带记忆与审批：挂 checkpointer 与 store，写文件前先挂起。",
-        code: `import os
-from pathlib import Path
+        hint: "覆盖成带记忆与审批：保留一个子 agent，挂 checkpointer 与 store，写文件前先挂起。",
+        code: `import dotenv from "dotenv";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { InMemoryStore, MemorySaver } from "@langchain/langgraph";
+import { type SubAgent, createDeepAgent } from "deepagents";
 
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.store.memory import InMemoryStore
+dotenv.config({ path: ".env.local" });
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
+const model = new ChatDeepSeek({
+  model: "deepseek-chat",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
 
-# 接入点：checkpointer 管 thread 内续跑，store 管跨 thread 记忆
-# 写文件这类副作用要先挂起等人确认（interrupt），再恢复执行
-agent = create_deep_agent(
-    model=model,
-    tools=[],
-    checkpointer=InMemorySaver(),
-    store=InMemoryStore(),
-)
+const researcher: SubAgent = {
+  name: "researcher",
+  description: "只读被指定的那一份材料，把要点写进独立文件",
+  systemPrompt: "只处理被指定的那一份材料，产出独立的 notes 文件。",
+  tools: [],
+};
 
-config = {"configurable": {"thread_id": "report-1"}}
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "把结论写进 report.md"}]},
-    config,
-)
+// 接入点：checkpointer 管 thread 内续跑，store 管跨 thread 的长期记忆
+// interruptOn 按工具名配置人工确认：写文件这类副作用先挂起等人点头
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  subagents: [researcher],
+  checkpointer: new MemorySaver(),
+  store: new InMemoryStore(),
+  interruptOn: { write_file: true },
+});
 
-# 挂起时状态里有待处理的中断；恢复用 Command(resume=...)
-print("中断：", result.get("__interrupt__"))
-# 恢复时节点会整段重跑：发通知、扣款这类动作必须可重复执行
+const result = await agent.invoke(
+  { messages: [{ role: "user", content: "把结论写进 /workspace/report.md" }] },
+  { configurable: { thread_id: "report-1" } },
+);
+
+// 挂起时结果里带中断信息；恢复用 Command({ resume: ... }) 带回答复
+console.log("中断：", result.__interrupt__);
+// 恢复时节点会整段重跑：发通知、扣款这类动作必须可重复执行
+
+// 收尾判断：任务是否长（多步、要记进度）、产物是否大（要文件系统）、
+// 子任务是否可并行且需要上下文隔离。三条都不占，就别上这套架构。
 `,
       },
     ],
@@ -900,130 +819,6 @@ print("中断：", result.get("__interrupt__"))
       {
         title: "人在环",
         href: "https://docs.langchain.com/oss/python/langgraph/interrupts",
-      },
-    ],
-  },
-  {
-    kind: "project",
-    slug: "local-server",
-    title: "本地服务：用 Studio 看 planner 与子 agent",
-    menuTitle: "本地服务",
-    summary:
-      "调试 deep agent 最有效的手段不是打印日志，而是看整棵调用树：谁派的活、几个子 agent、各自烧了多少。",
-    install: {
-      command: "uv add --dev langgraph-cli[inmem]",
-      description: "在 my-deepagents-app 目录执行，装上本地 Agent Server 的命令行工具。",
-    },
-    verify: {
-      label: "跑起来看层级",
-      description: [
-        "在 my-deepagents-app 目录执行 uv run langgraph dev",
-        "打开打印出来的 Studio 地址，能看到主 agent、子 agent 与工具调用各成一层的调用树",
-      ],
-    },
-    concepts: [
-      { text: "`langgraph.json` — 本地服务的配置：把哪张图注册成哪个名字、读哪个 env 文件" },
-      { text: "`langgraph dev` — 起本地 Agent Server（内存模式），Studio 直接连它看调用树" },
-    ],
-    files: [
-      {
-        path: "langgraph.json",
-        order: 1,
-        action: "create",
-        hint: "把图注册成名字叫 agent 的服务入口，env 指向已有的 .env.local。",
-        code: `{
-  "dependencies": ["."],
-  "graphs": {
-    "agent": "./src/minimal.py:agent"
-  },
-  "env": ".env.local"
-}`,
-      },
-      {
-        path: "终端",
-        order: 2,
-        action: "run",
-        hint: "起本地服务（内存模式），按打印出来的地址打开 Studio：",
-        code: `uv run langgraph dev`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "本地 Agent Server",
-        href: "https://docs.langchain.com/oss/python/langgraph/local-server",
-      },
-      {
-        title: "LangSmith 观测",
-        href: "https://docs.langchain.com/oss/python/langgraph/observability",
-      },
-    ],
-  },
-  {
-    kind: "project",
-    slug: "selection-and-eval",
-    title: "选型与评测：什么时候该用深 agent",
-    menuTitle: "选型与评测",
-    summary:
-      "把「用不用」讲清楚：同一任务跑手写图与 deep agent，比步数、输入规模与结果质量，得出自己的判断线。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 uv run python -m src.eval_compare",
-        "打印出两种实现的步数与输入规模对比，以及一份按三条判断线写出的选用结论",
-      ],
-    },
-    concepts: [
-      { text: "`evaluate` — LangSmith 的评测入口：按数据集批量跑并算分" },
-      { text: "`recursion_limit` — 一次运行允许走多少步的上限，长任务必须显式设置" },
-    ],
-    files: [
-      {
-        path: "src/eval_compare.py",
-        order: 1,
-        action: "create",
-        hint: "对照脚本：同一任务分别跑两种实现，把规模与质量指标打出来。",
-        code: `import os
-import time
-from pathlib import Path
-
-from deepagents import create_deep_agent
-from dotenv import load_dotenv
-from langchain_deepseek import ChatDeepSeek
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
-model = ChatDeepSeek(model="deepseek-chat", api_key=os.environ["DEEPSEEK_API_KEY"])
-
-agent = create_deep_agent(model=model, tools=[])
-question = "读 content/ 下的材料，写一份带出处的对比报告到 report.md"
-
-# 步数上限放在 config 顶层，不是 configurable 里
-start = time.time()
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": question}]},
-    {"recursion_limit": 40},
-)
-
-messages = result["messages"]
-print("耗时：", round(time.time() - start, 1), "秒")
-print("消息数：", len(messages))
-print("输入规模：", sum(len(str(m.content)) for m in messages))
-print("产出：", list((result.get("files") or {}).keys()))
-
-# 批量评测走 LangSmith 的 evaluate：先建数据集，再按评分器跑一遍
-# 三条判断线：任务是否长（多步需记进度）、产物是否大（需文件系统）、
-# 子任务是否可并行且需要上下文隔离。三条都不占，就用一条简单的链。
-print("按三条判断线写出结论，再决定要不要继续加子 agent 与中间件")
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "LangSmith 评测",
-        href: "https://docs.langchain.com/langsmith/evaluation",
-      },
-      {
-        title: "Deep Agents 概览",
-        href: "https://docs.langchain.com/oss/python/deepagents/overview",
       },
     ],
   },

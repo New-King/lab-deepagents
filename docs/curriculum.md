@@ -1,92 +1,64 @@
 # 课表：Deep Agents（预置 agent 架构）
 
-> 主线 10 课。核心问题只有一个：**一个能扛长任务的 agent，到底多出了什么？**
-> 学员维护一个 Python 项目 `my-deepagents-app`，每课覆盖式演进（见 `README.md`）。
+> 主线 5 课，只讲「它大概是什么、核心靠什么扛长任务」。
+> 核心问题只有一个：**一个能扛长任务的 agent，到底多出了什么？**
+> 学员维护一个 TypeScript 项目 `my-deepagents-app`，每课覆盖式演进（见 `README.md`）。
 > 场景：技术调研报告 agent（给题目 → 多路查证 → 汇总成带出处的报告）。
 > **前置**：`lab-langgraph` 第 1–6 课 + 第 11 课。
 
+## 总览
+
+| 课 | 主题 | 本课出现的能力 | 变更文件 |
+|---|---|---|---|
+| 0 | 初始化：uv 建项目、装依赖、配 Key | — | `INIT_STEPS` |
+| 1 | 它是什么：一行拿到配好的 agent | `createDeepAgent` `invoke` `todoListMiddleware` `write_todos` | `src/minimal.ts` |
+| 2 | 上下文工程：文件代替上下文 | `write_file` `read_file` `files` `middleware` | `src/minimal.ts` |
+| 3 | 后端：文件到底存在哪 | `backend` `StateBackend` `FilesystemBackend` `CompositeBackend` `virtualMode` `StoreBackend` `LocalShellBackend` `SandboxBackendProtocol` | `src/backends.ts` |
+| 4 | 子 agent：隔离上下文，也能同时开几路 | `subagents` `SubAgent` `task` | `src/subagents.ts` |
+| 5 | 记忆与审批：把底层能力接进来 | `checkpointer` `store` `interruptOn` | `src/subagents.ts` |
+
 ---
 
-### 第 1 课 · 从手写图到 `create_deep_agent`
+### 第 1 课 · 它是什么：一行拿到配好的 agent
 
 - **目标**：先看清「省掉了什么」，才知道它到底加了什么
-- **示例**：`create_deep_agent(...)` 跑一个多步任务；对照 `lab-langgraph` 第 4 课手写的 `llmCall` / `toolNode` / `route` 三件套
-- **要点**：它没有替代 LangGraph，而是给你一份**已配置好的图 + 系统提示 + 一组内置工具**；判断标准是「任务是否需要多步、需要中途记进度、产物很大」
-- **验收**：同一个任务，手写版与 `create_deep_agent` 版都能跑，列出后者多出的东西
+- **示例**：`createDeepAgent(...)` 跑一个需要拆解的任务，打印每一步的工具调用与最终待办
+- **要点**：它没有替代 LangGraph，而是给你一份**已配置好的图 + 系统提示 + 一组内置工具**（待办 / 文件 / 派活）；判断标准是「任务是否需要多步、需要中途记进度、产物很大」
+- **验收**：一次运行里能看到 `write_todos` 与写文件被自动调用，最终待办清单与任务对得上
 - **文档**：Deep Agents 官方 Overview / Quickstart
 - **延伸阅读**：知识点右上角弹窗 —— 「Deep Agents 是什么：与 LangGraph、编排平台的分工」（三层关系、与拖拽式平台的区别、三种退化与对位解法、为什么解法有效、为什么值得单独做个库、代价与不该用的场景、同类对照）
 
-### 第 2 课 · 内置工具四件套
+### 第 2 课 · 上下文工程：用文件代替上下文
 
-- **目标**：搞清默认给 agent 装了哪些工具、各自解决什么问题
-- **示例**：打印一次运行的消息序列，看内置工具的调用与返回
-- **要点**：`write_todos`（进度）、文件读写（大产物）、`task`（派子 agent）—— 三者分别对应「别忘事 / 别撑爆上下文 / 别搅在一起」；先看懂默认工具，再谈自定义
-- **验收**：消息日志里能指出哪一步用了哪个内置工具、为什么
-- **文档**：官方 Tools / 内置工具章节
+- **目标**：理解长任务的上下文管理核心手法 —— 这是它最核心的一招
+- **示例**：让 agent 把中间产物写进虚拟文件，再读回片段；对比「全塞上下文」的输入规模
+- **要点**：文件 = 外部记忆，只把**需要的片段**读回 prompt；`files` 是状态字段；写文件是**副作用**，要配合第 5 课的中断与幂等；摘要类中间件负责压历史，会**丢信息**，要决定哪些必须保留
+- **验收**：同一任务下，写文件版第二轮输入不随材料变长而线性膨胀（给出数字）
+- **文档**：官方 File system / Backends 章节 + LangChain 中间件
 
-### 第 3 课 · Planning：todo 清单怎么用
+### 第 3 课 · 后端：文件到底存在哪
 
-- **目标**：让 agent 在长任务里「记得自己做到哪了」
-- **示例**：一个必须拆解的任务（对比三篇文章并写摘要），观察 todo 的生成 → 更新 → 完成
-- **要点**：拆解粒度（太粗没意义、太细变成流水账）；todo 是**状态**不是输出（要能被打勾）；常见失败：列了不做、反复重列同一条
-- **验收**：todo 清单能反映真实进度，且最终任务与清单对得上
-- **文档**：官方 Planning / `write_todos` 章节
+- **目标**：搞清「写进文件」这句话背后，文件实存在哪里、能活多久
+- **示例**：默认 `StateBackend` 跑一次（状态里有、磁盘上没有），再换 `CompositeBackend`：`/workspace/` 路由到 `FilesystemBackend` 落盘，内部产物留状态
+- **要点**：默认后端跟 thread 走，重启即失；`FilesystemBackend` 才落真实磁盘，`virtualMode` 默认 **false 等于没有保护**，配 `rootDir` 必须开；agent 会把 `/large_tool_results/`、`/conversation_history/` 也写进 backend，所以单独套 `FilesystemBackend` 会把内部产物混进项目目录，要用 `CompositeBackend` 分层；跨 thread 的长期记忆用 `StoreBackend`（构造时传 stateAndStore 与 namespace）；要执行命令用 `LocalShellBackend`（无隔离，仅开发），生产换成实现 `SandboxBackendProtocol` 的沙箱后端，工具集会多一个 `execute`
+- **验收**：`workspace/notes.md` 出现在本地磁盘，状态里只剩内部产物
+- **文档**：官方 Backends 章节
 
-### 第 4 课 · 虚拟文件系统：为什么用「文件」代替上下文
-
-- **目标**：理解长任务的上下文管理核心手法
-- **示例**：让 agent 把中间产物写进虚拟文件，再读回片段；对比「全塞上下文」的 token 消耗
-- **要点**：文件 = 外部记忆，只把**需要的片段**读回 prompt；文件在状态里存什么形状、后端选「内存（状态）」还是「真实磁盘」；写文件是**副作用**，要配合第 8 课的中断与幂等
-- **验收**：同一任务下，写文件版的输入 token 明显低于全塞上下文版（给出数字）
-- **文档**：官方 File system / Backends 章节
-
-### 第 5 课 · Subagents：上下文隔离
+### 第 4 课 · 子 agent：隔离上下文，也能同时开几路
 
 - **目标**：什么时候该把活分给子 agent，而不是给主 agent 加工具
-- **示例**：定义「研究者」与「写作者」两个子 agent（各自的 prompt / 工具 / 模型），由主 agent 通过 `task` 调用
-- **要点**：子 agent 的价值是**上下文隔离**（各干各的、互不污染）与**权限收窄**（只给它该有的工具）；不是越多越好——能用一个 agent 一个工具解决的，别拆
-- **验收**：同一任务对比「单 agent 多工具」与「多子 agent」，说清各自代价（步数 / token / 可控性）
-- **文档**：官方 Subagents 章节
-
-### 第 6 课 · 并行子 agent
-
-- **目标**：让互不依赖的子任务同时跑
-- **示例**：同一轮派多个子 agent（多路调研），再汇总
-- **要点**：**与 `lab-langgraph` 第 10 课 `Send` 对照** —— `Send` 是你在图上显式声明的动态并行，这里是 agent 自己决定要派几个；并行写同一份状态时仍需要 reducer 合并
+- **示例**：定义「研究者」与「写作者」两个子 agent（各自的 prompt / 工具），由主 agent 通过 `task` 调用；三份材料在同一轮派出去
+- **要点**：子 agent 的价值是**上下文隔离**（各干各的、互不污染）与**权限收窄**（只给它该有的工具）；并行是模型自己在同一轮返回多个 `task` 调用触发的；不是越多越好 —— 能用一个 agent 一个工具解决的，别拆
 - **验收**：日志能看出多个子 agent 在同一轮执行，且汇总结果包含全部来源
-- **文档**：官方 Subagents / 并行章节
+- **文档**：官方 Subagents 章节 + LangGraph 并行
 
-### 第 7 课 · 中间件与长上下文管理
+### 第 5 课 · 记忆与审批：把底层能力接进来
 
-- **目标**：把「上下文怎么裁」变成可配置的钩子，而不是靠提示词祈祷
-- **示例**：挂摘要中间件（历史过长自动摘要）+ 写一个自定义中间件（在模型调用前后 / 工具调用前后做点什么，如日志、参数校验）
-- **要点**：中间件 = 图执行的可插拔横切面；摘要会**丢信息**，要决定哪些必须保留（如已确认的事实）；与 `lab-langgraph` 第 7 课的 `writer` / 第 8 课 `ContextSchema` 是不同层的东西
-- **验收**：长对话（30+ 轮）下不爆上下文，且关键事实仍在
-- **文档**：官方 Middleware / Summarization 章节
-
-### 第 8 课 · 记忆与人在环
-
-- **目标**：把 `lab-langgraph` 学过的三样接进 deep agent
-- **示例**：`checkpointer`（同 thread 续跑）+ `Store`（跨会话记忆）+ `interrupt`（写文件 / 发通知前人工确认）
-- **要点**：这三样都不是 deep agent 发明的，是底层 LangGraph 的能力；接入点是 `create_deep_agent` 的参数与中间件；**重跑幂等**依旧成立（挂起恢复后节点从头执行）
+- **目标**：把 `lab-langgraph` 学过的三样接进 deep agent，并收尾选型
+- **示例**：`checkpointer`（同 thread 续跑）+ `store`（跨会话记忆）+ `interruptOn`（写文件前人工确认）
+- **要点**：这三样都不是 deep agent 发明的，是底层 LangGraph 的能力；接入点是 `createDeepAgent` 的参数；**重跑幂等**依旧成立（挂起恢复后节点从头执行）；收尾给出三条判断线 —— 任务是否长、产物是否大、子任务是否可并行且需要隔离，三条都不占就别上
 - **验收**：挂起 → 人工批准 → 继续；再开一条 thread 仍记得长期记忆
 - **文档**：官方 Persistence / Human-in-the-loop 章节 + `lab-langgraph` 第 5、6、8 课
-
-### 第 9 课 · 接网页与可观测
-
-- **目标**：让 deep agent 能被真实用户用、能被自己看懂
-- **示例**：`langgraph.json` 注册图 → 本地 Agent Server → 复用 `lab-langgraph` 第 11 课的 `useStream` 聊天页；LangSmith 里看 planner / subagent 的层级
-- **要点**：trace 树能直接看出「主 agent 派了几个子 agent、每个花了多少 token」——这是调试 deep agent 的主要手段；前端不用重写（协议同一套）
-- **验收**：网页里能跑通一次多子 agent 的任务；LangSmith 里能定位是哪一步烧的钱
-- **文档**：`lab-langgraph` 第 11、12 课 + 官方 Observability
-
-### 第 10 课 · 选型与评测：什么时候该用深 agent
-
-- **目标**：把「用不用」讲清楚——这正是面试要听的
-- **示例**：同一任务跑「手写图」与「deep agent」，对比步数 / token / 结果质量 / 可控性；给出评测集与评分口径
-- **要点**：三条判断线 —— ① 任务是否**长**（多步、需要记进度）② 产物是否**大**（需要文件系统）③ 子任务是否**可并行且上下文需要隔离**；三条都不占就别上，简单链路用 `lab-ai-sdk` 那套即可
-- **验收**：写出一页对比结论文档，包含「本项目场景下我选哪个、为什么」
-- **文档**：官方 Overview + `lab-langgraph` 全课
 
 ---
 
@@ -94,8 +66,9 @@
 
 | 面试常问 | 落点 |
 |---|---|
-| 长任务怎么保证不跑偏 | 第 3、7 课（planner + 上下文管理） |
-| 上下文超长怎么办 | 第 4、7 课（文件系统 + 摘要） |
-| 多 agent 怎么协作、怎么隔离上下文 | 第 5、6 课 |
-| 记忆与人工审批怎么做 | 第 8 课 |
-| 什么时候用预置 agent、什么时候自己画图 | 第 1、10 课（本课重点） |
+| 长任务怎么保证不跑偏 | 第 1 课（`write_todos` + `todoListMiddleware`） |
+| 上下文超长怎么办 | 第 2 课（文件系统 + 中间件摘要） |
+| 产物存哪、怎么跨会话 | 第 3 课（`backend` / `CompositeBackend` / `StoreBackend`） |
+| 多 agent 怎么协作、怎么隔离上下文 | 第 4 课（`subagents` / `task` / 并行） |
+| 记忆与人工审批怎么做 | 第 5 课（`checkpointer` / `store` / `interruptOn`） |
+| 什么时候用预置 agent、什么时候自己画图 | 第 1 课延伸阅读 + 第 5 课收尾 |

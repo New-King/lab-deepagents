@@ -38,8 +38,8 @@ export const HOME = {
     {
       title: "本 Lab 讲什么",
       paragraphs: [
-        "本 Lab 采用项目驱动式学习：在独立的 Python 项目 my-deepagents-app 里，按左侧课程把一个「技术调研报告 agent」逐步搭起来。",
-        "学习路径：起点对照 → 内置工具 → Planning → 文件系统 → 子 agent → 并行 → 中间件 → 记忆与审批 → 本地服务看层级 → 选型与评测。",
+        "本 Lab 采用项目驱动式学习：在独立的 TypeScript 项目 my-deepagents-app 里，按左侧课程把一个「技术调研报告 agent」逐步搭起来。",
+        "学习路径（5 课）：它是什么 → 上下文工程 → 后端 → 子 agent → 记忆与审批。只留五个核心概念，其余能力在对应课的注释与延伸阅读里带过。",
       ],
     },
     {
@@ -54,13 +54,13 @@ export const HOME = {
   stack: {
     title: "本教程技术栈",
     items: [
-      { label: "语言", value: "Python 3.12" },
-      { label: "环境工具", value: "uv" },
+      { label: "语言", value: "TypeScript（Node 20+）" },
+      { label: "环境工具", value: "pnpm + tsx" },
       { label: "agent 架构", value: "deepagents（基于 LangGraph）" },
-      { label: "底层编排", value: "@langchain/langgraph 的 Python 包" },
-      { label: "模型", value: "DeepSeek（langchain-deepseek 的 ChatDeepSeek）" },
-      { label: "本地服务", value: "langgraph-cli 起 Agent Server，用 Studio 看调用树" },
-      { label: "验证方式", value: "每课一个可独立运行的 Python 脚本" },
+      { label: "底层编排", value: "@langchain/langgraph" },
+      { label: "模型", value: "DeepSeek（@langchain/deepseek 的 ChatDeepSeek）" },
+      { label: "文档对照", value: "官方 Python 文档 + TS 类型定义" },
+      { label: "验证方式", value: "每课一个可独立运行的 TS 脚本" },
     ] satisfies HomeStackItem[],
   },
   cta: {

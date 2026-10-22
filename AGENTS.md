@@ -11,7 +11,7 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 
 ## 二、信息架构
 
-- **左侧菜单 = 主线课**，顺序见 `docs/curriculum.md`（10 课）。
+- **左侧菜单 = 主线课**，顺序见 `docs/curriculum.md`（5 课）。
 - 每课页 = 跟做步骤 + 知识点 + 文件 + 代码 + 右侧官方文档（`docLinks`），可选「延伸阅读」弹窗。
 - 每课有两个标题字段：`title`（页内 h1，完整、可带「：说明」）与 `menuTitle`（左侧菜单，短名）。**两个都必填**。
 - **验收写法**：2～3 行**陈述句** —— ① 怎么跑；② 跑完能看到什么。不写问句、不写检查清单。
@@ -20,8 +20,8 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 ## 三、动笔前必做：先查文档，不清楚就问
 
 1. **先查官方文档**：Deep Agents 官方文档 + `https://docs.langchain.com/**`（底层 LangGraph 行为以 LangGraph 文档为准）。API 名、参数、导入路径逐项对着文档写，**不凭印象**。
-2. **本包很新、迭代快**：`create_deep_agent` 的参数、内置工具名、中间件来源（属于 `deepagents` 还是 `langchain` 主包）**每次动笔前重新核实**，不许照抄旧文章。
-3. **Python 与 JS 版不等价**：本课程固定 Python（见 `README.md`）。**禁止**把 JS 写法当 Python 用法写进课里。
+2. **本包很新、迭代快**：`createDeepAgent` 的参数、内置工具名、中间件来源（属于 `deepagents` 还是 `langchain` 主包）**每次动笔前重新核实，以 npm 包里的类型定义为准**，不许照抄旧文章或 Python 示例。
+3. **Python 与 TS 版不等价**：本课程固定 TypeScript（见 `README.md`）。官方文档主线是 Python，**禁止**把 Python 写法直接当 TS 用法写进课里；蛇形/驼峰参数名、默认是否带待办工具都要逐项核对。
 4. **文档没写的、或与实际不符的**：先问用户，不要自己跑命令试探、也不要写进课里当事实。
 5. **没实测过的不要写成事实**：确认过的才写进步骤说明，未验证的在课里标「待验证」，并同步进 `README.md` 待办。
 6. **改 `lib/projects.ts` 前先 `git diff` 或重读文件**：整段替换会**静默覆盖**别人的改动。
@@ -34,40 +34,37 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 
 - 自写函数（本课程自己的辅助函数）
 - 「我们把参数传到哪」这类代码层面知识
-- 同一个能力在后续课重复列（哪课首次出现就在哪课写）；**底层 LangGraph 能力（checkpointer / interrupt / Store）在 `lab-langgraph` 已讲过，本课只在接入方式上列**
+- 同一个能力在后续课重复列（哪课首次出现就在哪课写）；**底层 LangGraph 能力（checkpointer / interrupt / store）在 `lab-langgraph` 已讲过，本课只在接入方式上列**
 
 只有讲**重要概念**（如为什么用文件代替上下文、为什么拆子 agent）时，才允许写示例代码里没出现的东西 —— 这类内容放 `conceptArticle` 或示例代码的中文注释里。
 
 ## 五、覆盖式演进（学员项目）
 
-学员维护**一个** Python 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`。逐课叠加：
+学员维护**一个** TypeScript 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`。逐课叠加：
 
 | 课 | 新增 | 覆盖 |
 |---|---|---|
-| 1 | `src/minimal.py` | — |
-| 2 | `src/tools_demo.py` | — |
-| 3 | — | `src/minimal.py` |
-| 4 | — | `src/minimal.py` |
-| 5 | `src/subagents.py` | — |
-| 6 | — | `src/subagents.py` |
-| 7 | — | `src/subagents.py` |
-| 8 | — | `src/subagents.py` |
-| 9 | `langgraph.json` | — |
-| 10 | `src/eval_compare.py` | — |
+| 1 | `src/minimal.ts` | — |
+| 2 | — | `src/minimal.ts` |
+| 3 | `src/backends.ts` | — |
+| 4 | `src/subagents.ts` | — |
+| 5 | — | `src/subagents.ts` |
 
 禁止每课新建项目、新建平行目录。
+
+**只讲 5 个核心**（文件系统 / 上下文压缩 / 后端 / 子 agent 隔离 / 记忆与审批），其余能力不进主线：Planning 与内置工具清单并入第 1 课，中间件并入第 2 课，并行子 agent 并入第 4 课。
 
 **每课的文件只包含本课要展示的内容**：后面课覆盖同一文件时，删掉本课用不到的子 agent、工具、中间件，不要为了「兼容前面课的脚本」而留着。
 
 ## 六、代码与依赖约定
 
 - **场景**：**技术调研报告 agent** —— 给一个题目，多路子 agent 查证 → 汇总 → 落成带出处的报告文件。数据 mock，不接真实外部服务。
-- **语言固定 Python 3.12**，用 `uv` 管环境；**不混 TS 写法**（第 9 课的 Next 前端是复用现成页面，不算课程内容）。
+- **语言固定 TypeScript**，Node 20+，用 `pnpm` 管依赖、`tsx` 跑脚本；不混 Python 写法。
 - 模型统一 **DeepSeek**（`deepseek-chat`）。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`。
-- 依赖只加课程真需要的包：`deepagents`、`langchain-deepseek`、`langgraph`（配套版本以 `deepagents` 的依赖为准）。**不要**引入其它 provider 或云服务。
-- 跑脚本统一用 `uv run python -m src.xxx`：**不带任何参数**。
-- 第 9 课用 Python 的 `langgraph-cli` 起本地 Agent Server：`uv add --dev langgraph-cli[inmem]` + `uv run langgraph dev`；不建自写前端，用 Studio 看调用树。
+- 依赖只加课程真需要的包：`deepagents`、`langchain`、`@langchain/langgraph`、`@langchain/deepseek`、`dotenv`，外加开发依赖 `typescript` / `tsx` / `@types/node`。**不要**引入其它 provider 或云服务。
+- 跑脚本统一用 `pnpm tsx src/xxx.ts`：**不带任何参数**。
+- 不建自写前端、不起本地 Agent Server：5 课全用命令行脚本验证。
 
 ## 七、写课约定
 

@@ -28,9 +28,15 @@ Deep Agents（LangChain 的 `deepagents`）的课程站点，站点结构、UI �
 
 ## 语言选型
 
-**本课以 Python 为准**：`deepagents` 的官方文档与示例以 Python 为主线。npm 上也有 JS 版，但其功能覆盖与示例完整度**未核实**（见「待办」），因此不承诺 TS 支线。
+**本课以 TypeScript 为准**（`deepagents@1.x`、`@langchain/deepseek`）：课程面向 TS 全栈项目，示例代码与真实工程一致。
 
-本课程不建自写前端：第 9 课用本地 Agent Server 自带的 Studio 看调用树（协议与前端 Hook 同一套，需要网页时另起一个 Next 前端即可接上）。
+代价与注意：
+
+- 官方文档主线是 **Python**，API 名是蛇形（`create_deep_agent` / `system_prompt` / `virtual_mode`），TS 是驼峰（`createDeepAgent` / `systemPrompt` / `virtualMode`）。对不上时以 **TS 类型定义**为准，不要照抄 Python 示例。
+- **待办工具默认不启用**：Python 版默认带 `write_todos`，TS 版要显式挂 `todoListMiddleware`（来自 `langchain` 包）。
+- Python 与 TS 的行为差异已在本课示例中标注，遇到文档没写的边界情况先查类型定义。
+
+本课程不建自写前端：5 课全部用命令行脚本验证，需要看调用树时另起本地 Agent Server 即可（协议与前端 Hook 同一套）。
 
 ## 站点结构
 
@@ -52,29 +58,24 @@ lab-deepagents/
 
 ## 学员项目的演进方式（覆盖式）
 
-学员维护一个 Python 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`，验证脚本在 `scripts/`；第 9 课加一个 Next 前端复用 `lab-langgraph` 第 11 课的页面。
+学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`。5 课只覆盖三个脚本。
 
 ```text
-第 0 课  uv venv + pip install deepagents langchain-deepseek + .env.local（DEEPSEEK_API_KEY）
-第 1 课  新建 src/minimal.py：create_deep_agent + 一个自带工具，跑通「一个长任务」
+第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek dotenv + .env.local（DEEPSEEK_API_KEY）
+第 1 课  新建 src/minimal.ts：createDeepAgent + todoListMiddleware，跑一个需要拆解的任务
          （对照 lab-langgraph 第 4 课手写的 llmCall / toolNode / route 三件套）
-第 2 课  新建 src/tools_demo.py：观察内置工具四件套（write_todos / 文件读写 / task）在消息里长什么样
-第 3 课  覆盖 src/minimal.py：给一个必须拆解的任务（如「对比三篇文章并写摘要」），看 todo 清单的生成与更新
-第 4 课  覆盖 src/minimal.py：把产物写进虚拟文件系统，验证大产物不再占用上下文
-第 5 课  新建 src/subagents.py：定义两个子 agent（研究者 / 写作者），由主 agent 通过 task 调用
-第 6 课  覆盖 src/subagents.py：同一轮派多个子 agent 并行（对照 lab-langgraph 第 10 课的 Send）
-第 7 课  覆盖 src/subagents.py：挂摘要中间件 + 自定义中间件（模型调用前后 / 工具调用前后挂钩）
-第 8 课  覆盖 src/subagents.py：接 checkpointer + Store（跨会话记忆）+ interrupt（写文件前人工确认）
-第 9 课  新建 langgraph.json（注册图，env 指向 .env.local）+ uv add --dev langgraph-cli[inmem]；用 Studio 看 planner / subagent 层级
-第 10 课 新建 src/eval_compare.py：同一任务跑「手写图」与「deep agent」，对比步数 / token / 结果质量，写清各自适用面
+第 2 课  覆盖 src/minimal.ts：产物写进虚拟文件、只读回需要的片段
+第 3 课  新建 src/backends.ts：换 backend —— CompositeBackend 把 /workspace/ 路由到磁盘，内部产物留状态
+第 4 课  新建 src/subagents.ts：两个子 agent（研究者 / 写作者），同一轮派多个 task 出去
+第 5 课  覆盖 src/subagents.ts：接 checkpointer + store + interruptOn（写文件前人工确认）
 ```
 
 ## 技术栈
 
 - 站点：Next.js（App Router）+ Tailwind + shiki（与 `lab-ai-sdk` 一致）
-- 课程主体：Python 3.12 + `deepagents`（基于 LangGraph）+ `langchain-deepseek` + `zod` 等价物（Pydantic）+ `uv`
-- 模型：DeepSeek（`deepseek-chat`）—— 与 `lab-langgraph` / `newking` 一致
-- 前端（第 9 课起）：`@langchain/react` 的 `useStream` + `langgraphjs` CLI 起本地 Agent Server（复用 `lab-langgraph` 第 11 课成果）
+- 课程主体：TypeScript + `deepagents`（基于 LangGraph）+ `langchain` + `@langchain/langgraph` + `@langchain/deepseek` + `dotenv` + `tsx`
+- 模型：DeepSeek（`deepseek-chat`）
+- 验证方式：每课一个可独立运行的 TS 脚本（`pnpm tsx src/xxx.ts`），不建前端
 - 场景：**技术调研报告 agent** —— 给一个题目，多路子 agent 并行查证 → 汇总 → 落成一篇带出处的报告文件
 
 ## 开发
@@ -86,11 +87,11 @@ pnpm dev          # 站点
 
 ## 待办
 
-- [ ] **API 名核实**：`create_deep_agent` 的参数表（tools / instructions / subagents / middleware）、内置工具的确切名字与状态字段（`todos` / `files`）—— 开写前对照官方文档逐个确认，**不要凭印象写进课里**
-- [ ] **JS 版覆盖度核实**：npm `deepagents` 是否具备 subagents / 中间件 / 文件系统后端，决定是否提供 TS 支线
-- [ ] **中间件来源核实**：摘要类中间件来自 `deepagents` 还是 `langchain` 主包（影响安装命令与 import 路径）
-- [ ] **第 6 课待核实**：并行子 agent 是否由主 agent 在同一轮返回多个 `task` 调用触发，与 `lab-langgraph` 第 10 课 `Send` 的差异要写清
-- [ ] **第 9 课待核实**：Python 图 + `langgraph.json` 在 `langgraphjs` CLI 下的启动方式（`langgraph dev` 是否需另装 Python CLI）
+- [x] **TS 版 API 核实**：`deepagents@1.15.1` 类型定义已核对 —— `createDeepAgent` 参数、`StateBackend` / `FilesystemBackend` / `CompositeBackend` / `StoreBackend` 构造、`SubAgent` 字段、`interruptOn`、`files` 状态字段
+- [x] **待办工具差异**：TS 版默认不带 `write_todos`，需显式挂 `todoListMiddleware`（来自 `langchain`）
+- [ ] **第 3 课实跑核实**：`CompositeBackend` + `FilesystemBackend` 在 Windows 与相对 rootDir 下的表现（课程用 `resolve()` 转绝对路径）
+- [ ] **第 5 课实跑核实**：`interruptOn` 挂起后 `result.__interrupt__` 的实际形状，以及 `Command({ resume })` 的恢复写法
+- [ ] **第 4 课待核实**：并行子 agent 是否由主 agent 在同一轮返回多个 `task` 调用触发（对照 `langgraph` 的 `Send`）
 - [ ] 站点脚手架（照抄 `lab-ai-sdk` 的 components / layout-classes）
 - [ ] 学员项目模板（每课「跟做」需要的最终代码）
 - [ ] 每课右侧 `docLinks` 全部校验可访问
