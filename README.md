@@ -61,7 +61,7 @@ lab-deepagents/
 学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`。5 课只覆盖三个脚本。
 
 ```text
-第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek dotenv + .env.local（DEEPSEEK_API_KEY）
+第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek + .env.local（DEEPSEEK_API_KEY）
 第 1 课  新建 src/minimal.ts：createDeepAgent + todoListMiddleware，跑一个需要拆解的任务
          （对照 lab-langgraph 第 4 课手写的 llmCall / toolNode / route 三件套）
 第 2 课  覆盖 src/minimal.ts：产物写进虚拟文件、只读回需要的片段
@@ -73,8 +73,8 @@ lab-deepagents/
 ## 技术栈
 
 - 站点：Next.js（App Router）+ Tailwind + shiki（与 `lab-ai-sdk` 一致）
-- 课程主体：TypeScript + `deepagents`（基于 LangGraph）+ `langchain` + `@langchain/langgraph` + `@langchain/deepseek` + `dotenv` + `tsx`
-- 模型：DeepSeek（`deepseek-chat`）
+- 课程主体：TypeScript + `deepagents`（基于 LangGraph）+ `langchain` + `@langchain/langgraph` + `@langchain/deepseek` + `tsx`
+- 模型：DeepSeek（`deepseek-flash`）—— 支持 Tool Calls，1M 上下文
 - 验证方式：每课一个可独立运行的 TS 脚本（`pnpm tsx src/xxx.ts`），不建前端
 - 场景：**技术调研报告 agent** —— 给一个题目，多路子 agent 并行查证 → 汇总 → 落成一篇带出处的报告文件
 
@@ -89,6 +89,7 @@ pnpm dev          # 站点
 
 - [x] **TS 版 API 核实**：`deepagents@1.15.1` 类型定义已核对 —— `createDeepAgent` 参数、`StateBackend` / `FilesystemBackend` / `CompositeBackend` / `StoreBackend` 构造、`SubAgent` 字段、`interruptOn`、`files` 状态字段
 - [x] **待办工具差异**：TS 版默认不带 `write_todos`，需显式挂 `todoListMiddleware`（来自 `langchain`）
+- [ ] **思考模式核实**：`deepseek-flash` 默认开思考模式，多轮工具调用时 reasoning 是否需回传、`ChatDeepSeek` 是否自动处理 —— 实跑确认，必要时在课里加一行开关说明
 - [ ] **第 3 课实跑核实**：`CompositeBackend` + `FilesystemBackend` 在 Windows 与相对 rootDir 下的表现（课程用 `resolve()` 转绝对路径）
 - [ ] **第 5 课实跑核实**：`interruptOn` 挂起后 `result.__interrupt__` 的实际形状，以及 `Command({ resume })` 的恢复写法
 - [ ] **第 4 课待核实**：并行子 agent 是否由主 agent 在同一轮返回多个 `task` 调用触发（对照 `langgraph` 的 `Send`）

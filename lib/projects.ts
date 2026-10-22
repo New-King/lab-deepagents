@@ -269,8 +269,8 @@ export const INIT_STEPS: CommandStep[] = [
     command: "pnpm init && pnpm pkg set type=module",
   },
   {
-    description: "装 Deep Agents、LangChain、LangGraph、DeepSeek 模型包，以及读 .env.local 用的 dotenv。",
-    command: "pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek dotenv",
+    description: "装 Deep Agents、LangChain、LangGraph 与 DeepSeek 模型包。",
+    command: "pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek",
   },
   {
     description: "装跑 TypeScript 脚本用的开发依赖。",
@@ -279,10 +279,6 @@ export const INIT_STEPS: CommandStep[] = [
   {
     description: "建语料与源码目录：调研任务要读的材料放在 content/。",
     command: "mkdir -p content src",
-  },
-  {
-    description: "在项目根目录创建 .env.local，填入 DeepSeek 的 API Key。",
-    command: "touch .env.local",
   },
 ];
 
@@ -309,12 +305,24 @@ export const NAV_ITEMS: NavItem[] = [
       },
       {
         path: ".env.local",
+        steps: [
+          {
+            description: "在项目根目录创建这个文件。",
+            command: "touch .env.local",
+          },
+        ],
         hint: "ChatDeepSeek 从环境变量 DEEPSEEK_API_KEY 读 Key，这里只写这一行：",
         code: `DEEPSEEK_API_KEY=sk-...`,
       },
       {
         path: "tsconfig.json",
-        hint: "新建：让 tsx 能跑 TS 脚本，ESM 与顶层 await 都放开。",
+        steps: [
+          {
+            description: "在项目根目录创建这个文件。",
+            command: "touch tsconfig.json",
+          },
+        ],
+        hint: "让 tsx 能跑 TS 脚本，ESM 与顶层 await 都放开。",
         code: `{
   "compilerOptions": {
     "target": "ES2022",
@@ -401,16 +409,20 @@ export const NAV_ITEMS: NavItem[] = [
         order: 1,
         action: "create",
         hint: "最小示例：一个模型 + 一个任务，看默认行为与工具调用痕迹。",
-        code: `import dotenv from "dotenv";
+        code: `import { loadEnvFile } from "node:process";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { createDeepAgent } from "deepagents";
 import { todoListMiddleware } from "langchain";
 
 // 脚本是裸 Node 进程，环境变量自己读
-dotenv.config({ path: ".env.local" });
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const model = new ChatDeepSeek({
-  model: "deepseek-chat",
+  model: "deepseek-flash",
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
@@ -488,15 +500,19 @@ console.log("产出文件：", Object.keys(result.files ?? {}));
         order: 1,
         action: "replace",
         hint: "覆盖成一次任务里写完再读回：产物进文件，只把需要的片段带进上下文。",
-        code: `import dotenv from "dotenv";
+        code: `import { loadEnvFile } from "node:process";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { createDeepAgent } from "deepagents";
 import { todoListMiddleware } from "langchain";
 
-dotenv.config({ path: ".env.local" });
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const model = new ChatDeepSeek({
-  model: "deepseek-chat",
+  model: "deepseek-flash",
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
@@ -584,8 +600,8 @@ console.log(
         hint: "换成 CompositeBackend：工作区落真实磁盘，内部产物留在状态里。",
         code: `import { mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadEnvFile } from "node:process";
 
-import dotenv from "dotenv";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import {
   CompositeBackend,
@@ -594,10 +610,14 @@ import {
   createDeepAgent,
 } from "deepagents";
 
-dotenv.config({ path: ".env.local" });
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const model = new ChatDeepSeek({
-  model: "deepseek-chat",
+  model: "deepseek-flash",
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
@@ -677,14 +697,18 @@ console.log("磁盘上的文件：", readdirSync(workspace));
         order: 1,
         action: "create",
         hint: "定义两个子 agent：一个只查资料，一个只写稿；任务拆成三路同时派出去。",
-        code: `import dotenv from "dotenv";
+        code: `import { loadEnvFile } from "node:process";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { type SubAgent, createDeepAgent } from "deepagents";
 
-dotenv.config({ path: ".env.local" });
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const model = new ChatDeepSeek({
-  model: "deepseek-chat",
+  model: "deepseek-flash",
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
@@ -767,15 +791,19 @@ console.log("产出文件：", Object.keys(result.files ?? {}));
         order: 1,
         action: "replace",
         hint: "覆盖成带记忆与审批：保留一个子 agent，挂 checkpointer 与 store，写文件前先挂起。",
-        code: `import dotenv from "dotenv";
+        code: `import { loadEnvFile } from "node:process";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { InMemoryStore, MemorySaver } from "@langchain/langgraph";
 import { type SubAgent, createDeepAgent } from "deepagents";
 
-dotenv.config({ path: ".env.local" });
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const model = new ChatDeepSeek({
-  model: "deepseek-chat",
+  model: "deepseek-flash",
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 

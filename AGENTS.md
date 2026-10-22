@@ -60,9 +60,9 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 
 - **场景**：**技术调研报告 agent** —— 给一个题目，多路子 agent 查证 → 汇总 → 落成带出处的报告文件。数据 mock，不接真实外部服务。
 - **语言固定 TypeScript**，Node 20+，用 `pnpm` 管依赖、`tsx` 跑脚本；不混 Python 写法。
-- 模型统一 **DeepSeek**（`deepseek-chat`）。
+- 模型统一 **DeepSeek**（`deepseek-flash`，支持 Tool Calls）。不要用已淘汰的 `deepseek-chat` 别名。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`。
-- 依赖只加课程真需要的包：`deepagents`、`langchain`、`@langchain/langgraph`、`@langchain/deepseek`、`dotenv`，外加开发依赖 `typescript` / `tsx` / `@types/node`。**不要**引入其它 provider 或云服务。
+- 依赖只加课程真需要的包：`deepagents`、`langchain`、`@langchain/langgraph`、`@langchain/deepseek`，外加开发依赖 `typescript` / `tsx` / `@types/node`。**不要**引入其它 provider 或云服务。
 - 跑脚本统一用 `pnpm tsx src/xxx.ts`：**不带任何参数**。
 - 不建自写前端、不起本地 Agent Server：5 课全用命令行脚本验证。
 

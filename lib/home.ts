@@ -58,7 +58,7 @@ export const HOME = {
       { label: "环境工具", value: "pnpm + tsx" },
       { label: "agent 架构", value: "deepagents（基于 LangGraph）" },
       { label: "底层编排", value: "@langchain/langgraph" },
-      { label: "模型", value: "DeepSeek（@langchain/deepseek 的 ChatDeepSeek）" },
+      { label: "模型", value: "DeepSeek（deepseek-flash，@langchain/deepseek 的 ChatDeepSeek）" },
       { label: "文档对照", value: "官方 Python 文档 + TS 类型定义" },
       { label: "验证方式", value: "每课一个可独立运行的 TS 脚本" },
     ] satisfies HomeStackItem[],
