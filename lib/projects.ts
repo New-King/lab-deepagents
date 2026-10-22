@@ -277,8 +277,8 @@ export const INIT_STEPS: CommandStep[] = [
     command: "pnpm add -D typescript tsx @types/node",
   },
   {
-    description: "建语料与源码目录：调研任务要读的材料放在 content/。",
-    command: "mkdir -p content src",
+    description: "建源码目录。产物写在虚拟文件系统里，不需要额外准备语料。",
+    command: "mkdir src",
   },
 ];
 
@@ -360,13 +360,16 @@ export const NAV_ITEMS: NavItem[] = [
       {
         text: "`todoListMiddleware` — 待办中间件：装上才给 agent 待办工具，默认并不带",
       },
-      { text: "`write_todos` — 待办工具：长任务里把进度外置成清单，逐条打勾" },
+      {
+        text: "`write_todos` — 由中间件注册给模型调用的工具：每次调用整份替换待办清单",
+        note: "脚本里不 import 它，只在工具调用记录里出现",
+      },
     ],
     conceptArticle: {
       title: "Deep Agents 是什么：与 LangGraph、编排平台的分工",
       body: [
         "## 它是什么",
-        "一个包，入口是 `create_deep_agent`。调用一次拿到的是一张「已经配好的图」：模型加工具循环的骨架、一段很长的系统提示、一组内置工具（待办、文件、子任务），以及上下文管理的中间件。",
+        "一个包，入口是 `createDeepAgent`。调用一次拿到的是一张「已经配好的图」：模型加工具循环的骨架、一段很长的系统提示、一组内置工具（待办、文件、子任务），以及上下文管理的中间件。",
         "骨架是固定的：只有「模型 ↔ 工具」这一个循环，没有画死的分支。具体走几步、调什么工具、要不要派子任务，全部由模型运行时决定。所谓「流程」不在图上的连线里，而在提示词、工具集与中间件诱导出的行为里。",
         "## 三层关系",
         "- **LangGraph**：引擎。图、状态、持久化、中断，都要自己画。",
@@ -423,10 +426,12 @@ try {
 
 const model = new ChatDeepSeek({
   model: "deepseek-flash",
+  // 单次输出上限：不设的话长任务容易一次写几千字，既慢又贵
+  maxTokens: 800,
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
-// 手写版要自己接模型、接工具、写循环；这里一行拿到配好的 agent
+// 手写版要自己管模型调用、自己绑工具并执行、自己写循环；这里一行拿到配好的 agent
 // 默认自带：模型与工具循环、文件系统工具（write_file / read_file / ls）、
 // 以及有 subagents 时派活用的 task；待办不在默认配置里，要显式挂中间件
 const agent = createDeepAgent({
@@ -441,15 +446,18 @@ const result = await agent.invoke({
     {
       role: "user",
       content:
-        "读完 content/ 下的三份材料，写一份对比报告到 report.md，每个结论都标出处",
+        "先列计划再动手：比较固定长度、按段落、按语义三种切块策略，写一份对比报告到 report.md，不超过 300 字，只写结论",
     },
   ],
 });
 
 // 内置工具在消息里留下痕迹：哪一步用了哪个工具、参数是什么
+// 只有 AI 消息带 tool_calls；先用 Array.isArray 做运行时收窄再取
+// （直接写 "tool_calls" in message 只会把类型收窄成 unknown，编译不过）
 for (const message of result.messages) {
-  if (!("tool_calls" in message)) continue;
-  for (const call of message.tool_calls ?? []) {
+  const calls = "tool_calls" in message ? message.tool_calls : undefined;
+  if (!Array.isArray(calls)) continue;
+  for (const call of calls) {
     console.log(call.name, call.args);
   }
 }
@@ -513,6 +521,7 @@ try {
 
 const model = new ChatDeepSeek({
   model: "deepseek-flash",
+  maxTokens: 800,
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
@@ -530,7 +539,7 @@ const result = await agent.invoke({
     {
       role: "user",
       content:
-        "读 content/ 下的材料，把每篇要点写进 summary-1.md，再只读这份文件写出三句话摘要",
+        "把三种切块策略的对比写进 summary-1.md（不超过 200 字），再只读这份文件写出三句话摘要",
     },
   ],
 });
@@ -582,7 +591,7 @@ console.log(
       { text: "`virtualMode` — 路径沙箱开关：默认 false 等于没有保护，配 rootDir 必须开" },
       {
         text: "`StoreBackend` — 把文件存进 Store：跨 thread 持久，适合长期记忆",
-        note: "构造时传 stateAndStore 与 namespace",
+        note: "需要同时给 createDeepAgent 传 store",
       },
       {
         text: "`LocalShellBackend` — 本地 shell 后端：能执行命令，但没有隔离，只适合开发",
@@ -591,7 +600,38 @@ console.log(
         text: "`SandboxBackendProtocol` — 沙箱后端协议：实现后自动多出 execute 工具",
         note: "在隔离环境里跑命令，生产环境用",
       },
+      {
+        text: "`BackendProtocol` — 后端要实现的接口：ls、readFile、writeFile、editFile、glob、grep",
+        note: "可选 execute；实现这套方法即可自接入",
+      },
+      {
+        text: "`namespace` — StoreBackend 的隔离键：不同用户、不同项目各存一格",
+        note: "多用户时必须显式给，否则所有人共用一份",
+      },
     ],
+    conceptArticle: {
+      title: "Backend 怎么选：四种存法、三条硬规则",
+      body: [
+        "## 它是什么",
+        "backend 是一个**对象**，实现一组文件操作方法：`ls`、`readFile`、`writeFile`、`editFile`、`glob`、`grep`，可选 `execute`。agent 的文件工具（`read_file`、`write_file` 等）只是把调用转发给它。",
+        "所以换 backend 不是「改个开关」，是换掉整套「文件怎么存取」的实现。模型对此无感：它只知道路径，不知道背后是内存、磁盘还是数据库。",
+        "## 四种现成的",
+        "| 后端 | 存哪 | 活着多久 | 适合 |",
+        "|---|---|---|---|",
+        "| `StateBackend` | 图状态（内存） | 跟 thread 走，进程退出即失 | 演示、临时产物 |",
+        "| `FilesystemBackend` | 真实磁盘目录 | 一直在 | 本地工具、单机 |",
+        "| `StoreBackend` | LangGraph Store（内存 / Postgres） | 跨 thread、跨重启 | 用户文件、长期记忆 |",
+        "| `LocalShellBackend` / 沙箱后端 | 磁盘或容器，并多出 `execute` | 看实现 | 需要跑命令 |",
+        "## 三条硬规则",
+        "1. **`rootDir` 必须给绝对路径**：官方文档明确要求，相对路径行为不确定。",
+        "2. **`virtualMode` 必须开**：默认 `false` 时即使设了 `rootDir`，也不限制路径（`..`、`~`、绝对路径都能出界）。",
+        "3. **大多数场景用 `CompositeBackend` 包住**：agent 会把内部产物（大工具结果、对话历史）也写进 backend，直接给磁盘会把这些东西混进项目目录。",
+        "## 什么时候要自己写",
+        "文件要进自家对象存储或自建表结构，**并且**需要像文件系统一样增删查改时，才实现 `BackendProtocol`。只是偶尔上传一个产物，写成普通工具更划算。",
+        "## 多用户隔离",
+        "`StoreBackend` 的 `namespace` 决定「存哪一格」。多用户、多项目场景必须显式给出，否则所有用户共用同一份存储——这是官方文档专门警告过的点。",
+      ],
+    },
     files: [
       {
         path: "src/backends.ts",
@@ -642,7 +682,7 @@ const agent = createDeepAgent({
 
 const result = await agent.invoke({
   messages: [
-    { role: "user", content: "把三份材料的要点写进 /workspace/notes.md" },
+    { role: "user", content: "把三种切块策略的要点整理成笔记，写进 /workspace/notes.md" },
   ],
 });
 
@@ -650,7 +690,8 @@ const result = await agent.invoke({
 console.log("状态里的文件：", Object.keys(result.files ?? {}));
 console.log("磁盘上的文件：", readdirSync(workspace));
 
-// 跨 thread 的长期记忆换成 StoreBackend：构造时传 stateAndStore 与 namespace
+// backend 只要满足 BackendProtocol（ls / readFile / writeFile / grep …）就能插进来
+// 跨 thread 的长期记忆换成 StoreBackend：new StoreBackend({ namespace }) + 传 store
 
 // 需要 agent 执行命令时，把默认后端换成 LocalShellBackend：能跑 shell，
 // 但没有隔离（命令能碰到宿主机的任意路径），只适合本地开发
@@ -715,8 +756,8 @@ const model = new ChatDeepSeek({
 // ① 子 agent 各自的边界：做什么、能碰哪些工具
 const researcher: SubAgent = {
   name: "researcher",
-  description: "只读被指定的那一份材料，把要点写进独立文件",
-  systemPrompt: "只处理被指定的那一份材料，产出独立的 notes 文件；不做总结陈词。",
+  description: "只写被指定的那一部分，把要点写进独立文件",
+  systemPrompt: "只处理被指定的那一部分，产出独立的 notes 文件；不做总结陈词。",
   tools: [],
 };
 
@@ -734,19 +775,21 @@ const agent = createDeepAgent({
   subagents: [researcher, writer],
 });
 
-// ③ 三份材料互不依赖：模型会在同一轮里返回多个 task 调用，底层并行执行
+// ③ 三部分互不依赖：模型会在同一轮里返回多个 task 调用，底层并行执行
 const result = await agent.invoke({
   messages: [
     {
       role: "user",
-      content: "分别读三份材料，各写一份 notes 文件，最后合并成 report.md",
+      content: "分别写三种切块策略各一段说明（每段不超过 100 字），各存一份 notes 文件，最后合并成 report.md",
     },
   ],
 });
 
-const calls = result.messages.flatMap((message) =>
-  "tool_calls" in message ? message.tool_calls ?? [] : [],
-);
+// 同样先收窄再取：flatMap 里返回空数组表示这条消息没有工具调用
+const calls = result.messages.flatMap((message) => {
+  const raw = "tool_calls" in message ? message.tool_calls : undefined;
+  return Array.isArray(raw) ? raw : [];
+});
 console.log("子任务调用数：", calls.filter((call) => call.name === "task").length);
 console.log("产出文件：", Object.keys(result.files ?? {}));
 `,
@@ -809,8 +852,8 @@ const model = new ChatDeepSeek({
 
 const researcher: SubAgent = {
   name: "researcher",
-  description: "只读被指定的那一份材料，把要点写进独立文件",
-  systemPrompt: "只处理被指定的那一份材料，产出独立的 notes 文件。",
+  description: "只写被指定的那一部分，把要点写进独立文件",
+  systemPrompt: "只处理被指定的那一部分，产出独立的 notes 文件。",
   tools: [],
 };
 
@@ -826,7 +869,7 @@ const agent = createDeepAgent({
 });
 
 const result = await agent.invoke(
-  { messages: [{ role: "user", content: "把结论写进 /workspace/report.md" }] },
+  { messages: [{ role: "user", content: "把结论写进 report.md" }] },
   { configurable: { thread_id: "report-1" } },
 );
 

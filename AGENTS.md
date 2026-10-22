@@ -40,7 +40,7 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 
 ## 五、覆盖式演进（学员项目）
 
-学员维护**一个** TypeScript 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`。逐课叠加：
+学员维护**一个** TypeScript 项目 `my-deepagents-app`：agent 在 `src/`。逐课叠加：
 
 | 课 | 新增 | 覆盖 |
 |---|---|---|
@@ -58,7 +58,7 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 
 ## 六、代码与依赖约定
 
-- **场景**：**技术调研报告 agent** —— 给一个题目，多路子 agent 查证 → 汇总 → 落成带出处的报告文件。数据 mock，不接真实外部服务。
+- **场景**：**技术对比报告 agent** —— 给一个题目，多路子 agent 并行撰写 → 汇总 → 落成带依据的报告文件。**不依赖外部语料**：默认 backend 是内存虚拟文件系统，读不到本地磁盘，课程任务不要假设有 `content/` 素材。
 - **语言固定 TypeScript**，Node 20+，用 `pnpm` 管依赖、`tsx` 跑脚本；不混 Python 写法。
 - 模型统一 **DeepSeek**（`deepseek-flash`，支持 Tool Calls）。不要用已淘汰的 `deepseek-chat` 别名。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`。

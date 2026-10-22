@@ -58,7 +58,7 @@ lab-deepagents/
 
 ## 学员项目的演进方式（覆盖式）
 
-学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`，语料在 `content/`。5 课只覆盖三个脚本。
+学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`。5 课只覆盖三个脚本，不依赖外部语料。
 
 ```text
 第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek + .env.local（DEEPSEEK_API_KEY）
@@ -76,7 +76,7 @@ lab-deepagents/
 - 课程主体：TypeScript + `deepagents`（基于 LangGraph）+ `langchain` + `@langchain/langgraph` + `@langchain/deepseek` + `tsx`
 - 模型：DeepSeek（`deepseek-flash`）—— 支持 Tool Calls，1M 上下文
 - 验证方式：每课一个可独立运行的 TS 脚本（`pnpm tsx src/xxx.ts`），不建前端
-- 场景：**技术调研报告 agent** —— 给一个题目，多路子 agent 并行查证 → 汇总 → 落成一篇带出处的报告文件
+- 场景：**技术对比报告 agent** —— 给一个题目，多路子 agent 并行撰写 → 汇总 → 落成一份带依据的报告文件（材料由模型自己推断，不需要准备语料）
 
 ## 开发
 

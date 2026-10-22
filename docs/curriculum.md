@@ -3,7 +3,7 @@
 > 主线 5 课，只讲「它大概是什么、核心靠什么扛长任务」。
 > 核心问题只有一个：**一个能扛长任务的 agent，到底多出了什么？**
 > 学员维护一个 TypeScript 项目 `my-deepagents-app`，每课覆盖式演进（见 `README.md`）。
-> 场景：技术调研报告 agent（给题目 → 多路查证 → 汇总成带出处的报告）。
+> 场景：技术对比报告 agent（给题目 → 多路撰写 → 汇总成带依据的报告）。不依赖外部语料。
 > **前置**：`lab-langgraph` 第 1–6 课 + 第 11 课。
 
 ## 总览
@@ -13,7 +13,7 @@
 | 0 | 初始化：uv 建项目、装依赖、配 Key | — | `INIT_STEPS` |
 | 1 | 它是什么：一行拿到配好的 agent | `createDeepAgent` `invoke` `todoListMiddleware` `write_todos` | `src/minimal.ts` |
 | 2 | 上下文工程：文件代替上下文 | `write_file` `read_file` `files` `middleware` | `src/minimal.ts` |
-| 3 | 后端：文件到底存在哪 | `backend` `StateBackend` `FilesystemBackend` `CompositeBackend` `virtualMode` `StoreBackend` `LocalShellBackend` `SandboxBackendProtocol` | `src/backends.ts` |
+| 3 | 后端：文件到底存在哪 | `backend` `StateBackend` `FilesystemBackend` `CompositeBackend` `virtualMode` `StoreBackend` `LocalShellBackend` `SandboxBackendProtocol` `BackendProtocol` `namespace` | `src/backends.ts` |
 | 4 | 子 agent：隔离上下文，也能同时开几路 | `subagents` `SubAgent` `task` | `src/subagents.ts` |
 | 5 | 记忆与审批：把底层能力接进来 | `checkpointer` `store` `interruptOn` | `src/subagents.ts` |
 
@@ -40,7 +40,7 @@
 
 - **目标**：搞清「写进文件」这句话背后，文件实存在哪里、能活多久
 - **示例**：默认 `StateBackend` 跑一次（状态里有、磁盘上没有），再换 `CompositeBackend`：`/workspace/` 路由到 `FilesystemBackend` 落盘，内部产物留状态
-- **要点**：默认后端跟 thread 走，重启即失；`FilesystemBackend` 才落真实磁盘，`virtualMode` 默认 **false 等于没有保护**，配 `rootDir` 必须开；agent 会把 `/large_tool_results/`、`/conversation_history/` 也写进 backend，所以单独套 `FilesystemBackend` 会把内部产物混进项目目录，要用 `CompositeBackend` 分层；跨 thread 的长期记忆用 `StoreBackend`（构造时传 stateAndStore 与 namespace）；要执行命令用 `LocalShellBackend`（无隔离，仅开发），生产换成实现 `SandboxBackendProtocol` 的沙箱后端，工具集会多一个 `execute`
+- **要点**：默认后端跟 thread 走，重启即失；`FilesystemBackend` 才落真实磁盘，`virtualMode` 默认 **false 等于没有保护**，配 `rootDir` 必须开；agent 会把 `/large_tool_results/`、`/conversation_history/` 也写进 backend，所以单独套 `FilesystemBackend` 会把内部产物混进项目目录，要用 `CompositeBackend` 分层；跨 thread 的长期记忆用 `StoreBackend({ namespace })`，并在 `createDeepAgent` 里传 `store`；要执行命令用 `LocalShellBackend`（无隔离，仅开发），生产换成实现 `SandboxBackendProtocol` 的沙箱后端，工具集会多一个 `execute`
 - **验收**：`workspace/notes.md` 出现在本地磁盘，状态里只剩内部产物
 - **文档**：官方 Backends 章节
 

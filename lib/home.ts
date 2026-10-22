@@ -38,7 +38,7 @@ export const HOME = {
     {
       title: "本 Lab 讲什么",
       paragraphs: [
-        "本 Lab 采用项目驱动式学习：在独立的 TypeScript 项目 my-deepagents-app 里，按左侧课程把一个「技术调研报告 agent」逐步搭起来。",
+        "本 Lab 采用项目驱动式学习：在独立的 TypeScript 项目 my-deepagents-app 里，按左侧课程把一个「技术对比报告 agent」逐步搭起来。",
         "学习路径（5 课）：它是什么 → 上下文工程 → 后端 → 子 agent → 记忆与审批。只留五个核心概念，其余能力在对应课的注释与延伸阅读里带过。",
       ],
     },
