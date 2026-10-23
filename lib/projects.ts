@@ -360,6 +360,9 @@ export const NAV_ITEMS: NavItem[] = [
         text: "`createDeepAgent` — 拿到一个已配置好的 agent：模型、内置工具、系统提示都由它装好",
       },
       {
+        text: "`write_file` / `read_file` — 内置文件工具：产物写进虚拟文件，需要时按需读回",
+      },
+      {
         text: "`backend` — 参数：文件最终写到哪；不传就用 StateBackend，跟着 thread 走、不落盘",
       },
       {
@@ -567,91 +570,6 @@ console.log(
       {
         title: "快速开始",
         href: "https://docs.langchain.com/oss/python/deepagents/quickstart",
-      },
-    ],
-  },
-  {
-    kind: "project",
-    slug: "virtual-filesystem",
-    title: "上下文工程：用文件代替上下文",
-    menuTitle: "上下文工程",
-    summary:
-      "长任务真正会爆的是上下文。这一课把大产物写进虚拟文件、只读回需要的片段，再用中间件把历史压掉 —— 这是它最核心的一招。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 pnpm tsx src/minimal.ts",
-        "打印出虚拟文件清单与消息规模，产物文件进了状态而不是留在对话里",
-      ],
-    },
-    concepts: [
-      { text: "`write_file` — 内置工具：把内容写进虚拟文件，产物不再占着上下文" },
-      { text: "`read_file` — 内置工具：按需把文件片段读回上下文" },
-      { text: "`files` — 状态里存放虚拟文件的字段：路径到内容的映射，跨轮持久" },
-      {
-        text: "`middleware` — createDeepAgent 的参数：在模型调用与工具调用前后挂钩子",
-      },
-    ],
-    files: [
-      {
-        path: "src/minimal.ts",
-        order: 1,
-        action: "replace",
-        hint: "覆盖成一次任务里写完再读回：产物进文件，只把需要的片段带进上下文。",
-        code: `import { loadEnvFile } from "node:process";
-import { ChatDeepSeek } from "@langchain/deepseek";
-import { createDeepAgent } from "deepagents";
-import { todoListMiddleware } from "langchain";
-
-try {
-  loadEnvFile(".env.local");
-} catch {
-  // 没有 .env.local 时忽略
-}
-
-const model = new ChatDeepSeek({
-  model: "deepseek-flash",
-  maxTokens: 2000,
-  apiKey: process.env.DEEPSEEK_API_KEY,
-});
-
-// middleware 是横切面：模型调用前后、工具调用前后都能挂钩子
-// 摘要类中间件（langchain 的 summarizationMiddleware）也挂这里，参数按官方文档配
-const agent = createDeepAgent({
-  model,
-  tools: [],
-  middleware: [todoListMiddleware()],
-});
-
-// 一次任务里走完：先 write_file 存进状态，再 read_file 只取回需要的那一段
-const result = await agent.invoke({
-  messages: [
-    {
-      role: "user",
-      content:
-        "把三种切块策略的对比写进 summary-1.md（不超过 200 字），再只读这份文件写出三句话摘要",
-    },
-  ],
-});
-
-// files 是状态字段：路径 → 内容，产物不再堆在对话里
-console.log("文件：", Object.keys(result.files ?? {}));
-console.log("消息数：", result.messages.length);
-console.log(
-  "输入规模：",
-  result.messages.reduce((total, message) => total + String(message.content).length, 0),
-);
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "Deep Agents 文件系统",
-        href: "https://docs.langchain.com/oss/python/deepagents/overview",
-      },
-      {
-        title: "LangGraph 状态",
-        href: "https://docs.langchain.com/oss/python/langgraph/graph-api",
       },
     ],
   },
