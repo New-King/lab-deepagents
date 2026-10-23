@@ -50,13 +50,12 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 | 课 | 新增 | 覆盖 |
 |---|---|---|
 | 1 | `src/minimal.ts` | — |
-| 2 | `src/backends.ts` | — |
-| 3 | `src/subagents.ts` | — |
-| 4 | — | `src/subagents.ts` |
+| 2 | `src/subagents.ts` | — |
+| 3 | — | `src/subagents.ts` |
 
 禁止每课新建项目、新建平行目录。
 
-**只讲 4 个核心**（文件系统 / 后端 / 子 agent 隔离 / 记忆与审批），其余能力不进主线：Planning 与内置工具清单并入第 1 课，并行子 agent 并入第 3 课；摘要压缩不进主线（`README.md` 待办留有思考模式冲突的记录）。
+**只讲 3 课**：第 1 课文件系统 + 待办（backend 只占一小节）、第 2 课子 agent 隔离、第 3 课记忆与审批。原「后端」独立课已删 —— 换 backend 属于 LangGraph 的 store 能力，一句话并入第 1 课，`store` 接入放第 3 课。Planning 与内置工具清单并入第 1 课，并行子 agent 并入第 2 课；摘要压缩不进主线（`README.md` 待办留有思考模式冲突的记录）。
 **每课的文件只包含本课要展示的内容**：后面课覆盖同一文件时，删掉本课用不到的子 agent、工具、中间件，不要为了「兼容前面课的脚本」而留着。
 
 ## 六、代码与依赖约定

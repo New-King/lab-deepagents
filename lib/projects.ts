@@ -324,7 +324,7 @@ export const NAV_ITEMS: NavItem[] = [
             command: "touch tsconfig.json",
           },
         ],
-        hint: "让 tsx 能跑 TS 脚本，ESM 与顶层 await 都放开。",
+        hint: "让 tsx 能够运行 TS 脚本，开放 ESM 与顶层 await。",
         code: `{
   "compilerOptions": {
     "target": "ES2022",
@@ -343,53 +343,56 @@ export const NAV_ITEMS: NavItem[] = [
   {
     kind: "project",
     slug: "from-graph-to-agent",
-    title: "一行拿到配好的 agent：它默认给了什么",
+    title: "它是什么：createDeepAgent 默认装配了什么",
     menuTitle: "它是什么",
     summary:
-      "手写版要自己接模型、接工具、写循环；这一课换成一行拿到配好的 agent，把默认行为看清楚 —— 文件工具与派活工具是自带的，待办要自己挂上去，产物默认只在内存里，所以顺手把它路由到磁盘。",
+      "直接使用 LangGraph，节点、条件边与工具执行都需要自己实现，几十行才能跑通一个任务。这一课看 `createDeepAgent` 一次配置包含了什么：文件工具与子任务派发默认提供，待办需要手动添加，产物默认只保存在内存中。",
     verify: {
       label: "跑脚本看结果",
       description: [
         "在 my-deepagents-app 目录执行 pnpm tsx src/minimal.ts",
-        "终端打印每轮的工具调用、最终待办与结束原因；workspace/report.md 出现在磁盘上，打开能看到报告正文",
-        "换成第二个小节的代码再跑一次：不发请求，只打印图里的节点与边",
+        "终端打印每轮的工具调用、最终待办与结束原因；workspace/report.md 出现在磁盘上，可直接打开查看报告正文",
+        "换成第二个小节的代码重新运行：不发起请求，只打印图中的节点与边",
       ],
     },
     concepts: [
       {
-        text: "`createDeepAgent` — 拿到一个已配置好的 agent：模型、内置工具、系统提示都由它装好",
+        text: "`createDeepAgent` — 得到一个已配置好的 agent：模型、内置工具、系统提示都已装配",
       },
       {
-        text: "`write_file` / `read_file` — 内置文件工具：产物写进虚拟文件，需要时按需读回",
+        text: "`write_file` / `read_file` — 内置文件工具：产物写入虚拟文件，需要时读回片段",
       },
       {
-        text: "`backend` — 参数：文件最终写到哪；不传就用 StateBackend，跟着 thread 走、不落盘",
+        text: "`backend` — 参数：文件最终写到哪个后端；不传则使用 StateBackend，随 thread 存在、不写入磁盘",
       },
       {
-        text: "`FilesystemBackend` — 写真实磁盘：rootDir 指目录，virtualMode 把路径限制在目录内",
+        text: "`FilesystemBackend` — 读写真实磁盘：rootDir 指定目录，virtualMode 把路径限制在目录内",
       },
       {
         text: "`CompositeBackend` — 按路径前缀分发：第一个参数是默认后端，第二个是路由表",
       },
-      { text: "`invoke` — 跑一次 agent，输入输出都是消息列表（底层就是 LangGraph 的图）" },
+      { text: "`invoke` — 执行一次 agent，输入与输出都是消息列表（底层是 LangGraph 图）" },
       {
-        text: "`todoListMiddleware` — 待办中间件：装上才给 agent 待办工具，默认并不带",
+        text: "`todoListMiddleware` — 待办中间件：启用后才提供待办工具，默认不包含",
       },
       {
-        text: "`getGraphAsync` — 从 agent.graph 上取底层图的节点与边：预置的只是一套配置",
+        text: "`getGraphAsync` — 从 agent.graph 读取底层图的节点与边，说明预置内容只是一套配置",
         note: "在 agent.graph 上调用，不发请求",
       },
     ],
     conceptArticle: {
       title: "Deep Agents 是什么：与 LangGraph、编排平台的分工",
       body: [
-        "## 它是什么",
-        "一个包，入口是 `createDeepAgent`。调用一次拿到的是一张「已经配好的图」：模型加工具循环的骨架、一段很长的系统提示、一组内置工具（待办、文件、子任务），以及上下文管理的中间件。",
-        "骨架是固定的：只有「模型 ↔ 工具」这一个循环，没有画死的分支。具体走几步、调什么工具、要不要派子任务，全部由模型运行时决定。所谓「流程」不在图上的连线里，而在提示词、工具集与中间件诱导出的行为里。",
         "## 文件默认存在哪",
         "不传 `backend` 时用的是 `StateBackend`：文件是图状态里的一个字段，跟 thread 走，进程退出即失。所以示例把 `/workspace/` 路由到真实磁盘，跑完能在目录里打开产物。",
         "默认后端仍留内存，是因为 agent 也会把内部产物（大工具结果、对话历史）写进文件系统；直接给磁盘会把这些混进项目目录，所以用 `CompositeBackend` 按路径分层。",
         "两条硬规则：`rootDir` 给绝对路径；`virtualMode` 必须开，默认 `false` 时即使设了 `rootDir` 也不限制路径（`..`、`~`、绝对路径都能出界）。",
+        "## 四种后端，怎么选",
+        "- `StateBackend`（默认）：文件进图状态，跟 thread 走，进程退出即失；不能执行命令。",
+        "- `FilesystemBackend`：写在真实磁盘，持久；不能执行命令。",
+        "- `StoreBackend`：写进 LangGraph 的 Store（键值库），可跨 thread；持久性取决于 store 实现，内存 store 随进程消失；不能执行命令。",
+        "- `LocalShellBackend`：磁盘加沙箱，能执行命令（无隔离，仅在开发用）。",
+        "换 backend 只影响两件事：**文件存在哪**、**能不能执行命令**。后者由 `isSandboxBackend(backend)` 判断，为 `true` 时 agent 才会被装上 `execute` 工具。",
         "## 三层关系",
         "- **LangGraph**：引擎。图、状态、持久化、中断，都要自己画。",
         "- **deepagents**：引擎之上的预置架构。把「长任务该怎么组织」沉淀成默认值，图由它生成，仍能拿回来继续改。",
@@ -410,9 +413,9 @@ export const NAV_ITEMS: NavItem[] = [
         "共同点是把隐式的东西显式化：进度从「模型自己记」变成状态字段，记忆从「对话历史」变成按需取用的文件，协作从「共享一个对话」变成文件加独立上下文。模型缺的不是能力，是在无界上下文里保持长程一致。",
         "## 为什么要单独做成一个库",
         "上面每一条用 LangGraph 都能写出来，代码本身不难：待办是一个状态字段加一个工具，文件系统是一个字典状态字段加读写工具，子 agent 是子图加一个派活工具。",
-        "贵的是设计决策，而且很难一次做对：待办放状态还是放消息、工具返回什么格式模型才肯用、文件读回的粒度怎么定、摘要什么时候触发、丢掉什么信息、子 agent 的边界怎么切、提示词怎么写。这些是反复试出来的经验值，这个库的价值主要就是把它们打包成默认值。",
+        "成本最高的是设计决策，而且很难一次做对：待办放状态还是放消息、工具返回什么格式模型才肯用、文件读回的粒度怎么定、摘要什么时候触发、丢掉什么信息、子 agent 的边界怎么切、提示词怎么写。这些是反复试出来的经验值，这个库的价值主要就是把它们打包成默认值。",
         "## 代价：慢在哪",
-        "慢在轮数，不在造图。图在创建 agent 时就定好，每次调用直接跑，不存在「先设计图再试一次」这个动作。真实开销来自：长任务可能十几次模型往返、每更新一次待办都是一次调用、每个子 agent 都是独立上下文加自己的模型调用、每轮还要多一段推理。",
+        "耗时主要在轮数，而不在构建图。图在创建 agent 时就定好，每次调用直接跑，不存在「先设计图再试一次」这个动作。真实开销来自：长任务可能十几次模型往返、每更新一次待办都是一次调用、每个子 agent 都是独立上下文加自己的模型调用、每轮还要多一段推理。",
         "控制成本有三招：设步数上限、收敛工具集（工具越多模型越爱试）、固定顺序的流程就直接画图。",
         "## 什么时候不该用",
         "- 三步以内、一个上下文装得下的任务：多挂三个用不上的工具加一段长提示，只会更慢更贵。",
@@ -430,7 +433,7 @@ export const NAV_ITEMS: NavItem[] = [
         path: "src/minimal.ts",
         order: 1,
         action: "create",
-        hint: "最小示例：一个模型 + 一个任务，看默认行为与工具调用痕迹，产物顺手落到磁盘。",
+        hint: "最小示例：一个模型加一个任务，观察默认行为与工具调用记录；产物同时写入磁盘。",
         code: `import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
@@ -459,7 +462,7 @@ const model = new ChatDeepSeek({
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
-// 手写版要自己管模型调用、自己绑工具并执行、自己写循环；这里一行拿到配好的 agent
+// 直接使用 LangGraph，得自己管模型调用、自己绑工具并执行、自己写循环；这里一次调用拿到配好的 agent
 // 默认自带：模型与工具循环、文件系统工具（write_file / read_file / ls）、
 // 以及有 subagents 时派活用的 task；待办不在默认配置里，要显式挂中间件
 // 默认 backend 是内存，文件只看得到名字、看不到实体
@@ -524,7 +527,7 @@ console.log("最后一条：", last.content);
         order: 2,
         action: "replace",
         title: "看图结构",
-        hint: "覆盖成只看结构：不调用模型、不花 token，打印中间件插进来的节点与边。",
+        hint: "覆盖成只读结构：不调用模型、不消耗 token，打印中间件加入的节点与边。",
         code: `import { loadEnvFile } from "node:process";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { createDeepAgent } from "deepagents";
@@ -575,145 +578,31 @@ console.log(
   },
   {
     kind: "project",
-    slug: "backends",
-    title: "后端：换一种存法",
-    menuTitle: "后端",
-    summary:
-      "上一课已经把 /workspace/ 路由到磁盘。这一课往后退一层：backend 只是一个实现了文件操作接口的对象，换成 Store 就能跨 thread 取回，换成 shell 后端还能执行命令。",
-    verify: {
-      label: "跑脚本看结果",
-      description: [
-        "在 my-deepagents-app 目录执行 pnpm tsx src/backends.ts",
-        "终端打印 Store 里读回的笔记、换新实例后仍读得到，以及 shell 命令的输出",
-        "整个过程不调用模型，只验证 backend 这一层",
-      ],
-    },
-    concepts: [
-      {
-        text: "`StoreBackend` — 把文件存进 Store：换 thread、换 agent 实例都还在",
-        note: "需要同时给 createDeepAgent 传 store",
-      },
-      {
-        text: "`namespace` — StoreBackend 的隔离键：不同用户、不同项目各存一格",
-        note: "多用户时必须显式给，否则所有人共用一份",
-      },
-      {
-        text: "`LocalShellBackend` — 带执行能力的本地后端：文件读写照旧，多出 execute",
-      },
-      {
-        text: "`SandboxBackendProtocol` — 沙箱后端协议：实现后自动多出 execute 工具",
-        note: "在隔离环境里跑命令，生产环境用",
-      },
-      {
-        text: "`BackendProtocol` — 后端要实现的接口：ls、read、write、edit、glob、grep",
-        note: "可选 execute；实现这套方法即可自接入",
-      },
-    ],
-    conceptArticle: {
-      title: "Backend 怎么选：四种存法对照",
-      body: [
-        "## 它是什么",
-        "backend 是一个**对象**，实现一组文件操作方法：`ls`、`read`、`write`、`edit`、`glob`、`grep`，可选 `execute`。agent 的文件工具（`read_file`、`write_file` 等）只是把调用转发给它。",
-        "所以换 backend 不是「改个开关」，是换掉整套「文件怎么存取」的实现。模型对此无感：它只知道路径，不知道背后是内存、磁盘还是数据库。",
-        "## 四种存法",
-        "| 后端 | 存哪 | 活着多久 | 适合 |",
-        "|---|---|---|---|",
-        "| `StateBackend` | 图状态（内存） | 跟 thread 走，进程退出即失 | 演示、临时产物 |",
-        "| `FilesystemBackend` | 真实磁盘目录 | 一直在 | 本地工具、单机 |",
-        "| `StoreBackend` | LangGraph Store（内存 / Postgres） | 看 store 实现；接数据库才跨重启 | 用户文件、长期记忆 |",
-        "| `LocalShellBackend` / 沙箱后端 | 磁盘或容器，并多出 `execute` | 看实现 | 需要跑命令 |",
-        "## 什么时候要自己写",
-        "文件要进自家对象存储或自建表结构，**并且**需要像文件系统一样增删查改时，才实现 `BackendProtocol`。只是偶尔上传一个产物，写成普通工具更划算。",
-        "## 多用户隔离",
-        "`StoreBackend` 的 `namespace` 决定「存哪一格」。多用户、多项目场景必须显式给出，否则所有用户共用同一份存储——这是官方文档特别警告过的点。",
-        "## 一个容易忽略的点",
-        "`InMemoryStore` 只活在这个进程里。换成 Postgres 之类的 store 实现，文件才真正跨重启；这一点和 backend 的选择是两件事。",
-      ],
-    },
-    files: [
-      {
-        path: "src/backends.ts",
-        order: 1,
-        action: "create",
-        hint: "不跑模型：直接对两个 backend 写读，看文件落在 Store 还是磁盘、命令能不能执行。",
-        code: `import { resolve } from "node:path";
-
-import { InMemoryStore } from "@langchain/langgraph";
-import { LocalShellBackend, StoreBackend } from "deepagents";
-
-// 这一课不经过模型：直接调 backend 的方法，把「文件到底存在哪」单独看清
-// Store 是 LangGraph 的长期存储：进程内用 InMemoryStore，接数据库换成 Postgres 实现
-const store = new InMemoryStore();
-
-// 文件存进 Store：namespace 决定存哪一格，多用户场景一个用户一格
-const storeBackend = new StoreBackend({
-  store,
-  namespace: ["reports", "user-1"],
-});
-
-// write / read 就是 agent 的文件工具最终调用的方法
-const written = await storeBackend.write("/notes.md", "三种切块策略的要点");
-console.log("写入：", written);
-
-const read = await storeBackend.read("/notes.md");
-console.log("读回：", read.content);
-
-// 换一个 backend 实例、同一个 store 与 namespace：文件还在，因为它不在实例里
-// 接回 agent 时把这个实例传进去：createDeepAgent({ model, store, backend: storeBackend })
-const again = new StoreBackend({ store, namespace: ["reports", "user-1"] });
-const reread = await again.read("/notes.md");
-console.log("新实例读回：", reread.content);
-
-// 需要执行命令时换 LocalShellBackend：文件读写照旧，多出 execute
-// 命令能碰到宿主机的任意路径，没有隔离，只适合本地开发
-// 生产用实现 SandboxBackendProtocol 的沙箱后端：工具集会自动多出 execute 工具
-const shell = new LocalShellBackend({ rootDir: resolve("workspace") });
-await shell.initialize();
-const out = await shell.execute("echo hello");
-console.log("命令输出：", out.output, "退出码：", out.exitCode);
-
-// 想接自家对象存储：实现 BackendProtocol 的那组方法即可，无需改 agent
-`,
-      },
-    ],
-    docLinks: [
-      {
-        title: "Deep Agents 后端",
-        href: "https://docs.langchain.com/oss/python/deepagents/backends",
-      },
-      {
-        title: "LangGraph 持久化",
-        href: "https://docs.langchain.com/oss/python/langgraph/persistence",
-      },
-    ],
-  },
-  {
-    kind: "project",
     slug: "subagents",
-    title: "子 agent：隔离上下文，也能同时开几路",
+    title: "子 agent：隔离上下文与并行派发",
     menuTitle: "子 agent",
     summary:
-      "子 agent 的价值不在「多一个大脑」，而在上下文隔离与权限收窄：各干各的、互不污染。互不依赖的子任务还能在同一轮同时开出去。",
+      "子 agent 的作用是隔离上下文与收窄权限：各自持有独立上下文，互不污染；互不依赖的子任务可以在同一轮并行派出。",
     verify: {
       label: "跑脚本看结果",
       description: [
         "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
-        "打印出子任务调用数与产出文件，同一轮里能看到多个 task 调用",
+        "打印子任务调用数与产出文件，同一轮里可以看到多个 task 调用",
       ],
     },
     concepts: [
-      { text: "`subagents` — createDeepAgent 的参数：声明可被派活的子 agent 名单" },
+      { text: "`subagents` — createDeepAgent 的参数：声明可被派发任务的子 agent 列表" },
       {
         text: "`SubAgent` — 子 agent 的规格类型：name、description、systemPrompt、tools",
       },
-      { text: "`task` — 主 agent 派活的工具：把子任务连同上下文一起交给某个子 agent" },
+      { text: "`task` — 主 agent 派发任务的工具：把子任务连同上下文交给指定子 agent" },
     ],
     files: [
       {
         path: "src/subagents.ts",
         order: 1,
         action: "create",
-        hint: "定义两个子 agent：一个只查资料，一个只写稿；任务拆成三路同时派出去。",
+        hint: "定义两个子 agent：一个负责查资料，一个负责写稿；任务拆成三路同时派出。",
         code: `import { loadEnvFile } from "node:process";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { type SubAgent, createDeepAgent } from "deepagents";
@@ -785,20 +674,21 @@ console.log("产出文件：", Object.keys(result.files ?? {}));
   {
     kind: "project",
     slug: "memory-and-hitl",
-    title: "记忆与审批：把底层能力接进来",
+    title: "记忆与审批：接入底层能力",
     menuTitle: "记忆与审批",
     summary:
-      "checkpointer、Store、interrupt 都不是这一层发明的，是底层图的能力。这一课把它们接到 deep agent 上，并收尾：什么任务值得上这套架构。",
+      "checkpointer、Store、interrupt 都不是这一层新增的，而是底层图的能力。这一课把它们接入 deep agent，并在收尾给出判断：什么任务适合这套架构。",
     verify: {
       label: "跑脚本看结果",
       description: [
         "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
-        "写文件前挂起并等待批准；批准后继续，换一条 thread 仍记得上一次的偏好",
+        "执行命令前挂起，打印出被拦下的命令与参数；批准后命令执行并给出结果",
       ],
     },
     concepts: [
       { text: "`checkpointer` — 按 thread 保存每一步状态，支持续跑与恢复" },
       { text: "`store` — 跨 thread 的长期记忆，节点与工具都能读写" },
+      { text: "`Command` — 从挂起处恢复执行：resume 携带批准或拒绝的决定" },
       {
         text: "`interruptOn` — 按工具名配置人工确认：调用前挂起，等人答复再继续",
         note: "必须同时给 checkpointer，否则无处保存挂起状态",
@@ -809,12 +699,16 @@ console.log("产出文件：", Object.keys(result.files ?? {}));
         path: "src/subagents.ts",
         order: 1,
         action: "replace",
-        hint: "覆盖成带记忆与审批：保留一个子 agent，挂 checkpointer 与 store，写文件前先挂起。",
-        code: `import { loadEnvFile } from "node:process";
-import { ChatDeepSeek } from "@langchain/deepseek";
-import { InMemoryStore, MemorySaver } from "@langchain/langgraph";
-import { type SubAgent, createDeepAgent } from "deepagents";
+        hint: "覆盖成带审批的版本：后端换成能执行命令的，execute 调用前挂起，批准后继续。",
+        code: `import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { loadEnvFile } from "node:process";
 
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { Command, MemorySaver } from "@langchain/langgraph";
+import { LocalShellBackend, createDeepAgent } from "deepagents";
+
+// 脚本是裸 Node 进程，环境变量自己读
 try {
   loadEnvFile(".env.local");
 } catch {
@@ -823,38 +717,42 @@ try {
 
 const model = new ChatDeepSeek({
   model: "deepseek-flash",
+  maxTokens: 4000,
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
-const researcher: SubAgent = {
-  name: "researcher",
-  description: "只写被指定的那一部分，把要点写进独立文件",
-  systemPrompt: "只处理被指定的那一部分，产出独立的 notes 文件。",
-  tools: [],
-};
+const workspace = resolve("workspace");
+mkdirSync(workspace, { recursive: true });
 
 // 接入点：checkpointer 管 thread 内续跑，store 管跨 thread 的长期记忆
-// interruptOn 按工具名配置人工确认：写文件这类副作用先挂起等人点头
+// 这个后端能执行命令，命令直接跑在宿主机上（能读系统文件、能删文件），所以每次都要人点头
 const agent = createDeepAgent({
   model,
   tools: [],
-  subagents: [researcher],
   checkpointer: new MemorySaver(),
-  store: new InMemoryStore(),
-  interruptOn: { write_file: true },
+  backend: new LocalShellBackend({ rootDir: workspace }),
+  // 挂起粒度是工具调用：execute 被调用前停下，等人批准
+  interruptOn: { execute: true },
 });
 
-const result = await agent.invoke(
-  { messages: [{ role: "user", content: "把结论写进 report.md" }] },
-  { configurable: { thread_id: "report-1" } },
+const config = { configurable: { thread_id: "shell-1" } };
+
+const first = await agent.invoke(
+  { messages: [{ role: "user", content: "执行 pwd，汇报当前工作目录" }] },
+  config,
 );
 
-// 挂起时结果里带中断信息；恢复用 Command({ resume: ... }) 带回答复
-console.log("中断：", result.__interrupt__);
-// 恢复时节点会整段重跑：发通知、扣款这类动作必须可重复执行
+// 中断信息在 __interrupt__ 里：被拦下的工具名、参数，以及允许的决定
+console.log("待批准：", JSON.stringify(first.__interrupt__));
 
-// 收尾判断：任务是否长（多步、要记进度）、产物是否大（要文件系统）、
-// 子任务是否可并行且需要上下文隔离。三条都不占，就别上这套架构。
+// 批准后继续：resume 携带决定，图从被拦下的位置接着跑
+const resumed = await agent.invoke(
+  new Command({ resume: { decisions: [{ type: "approve" }] } }),
+  config,
+);
+
+// 挂起恢复后节点会整段重跑：发通知、扣款这类动作必须可重复执行
+console.log("命令结果：", String(resumed.messages.at(-1)?.content).slice(0, 120));
 `,
       },
     ],
