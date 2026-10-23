@@ -2,7 +2,7 @@
 
 > 用途：确认「该讲的都讲了」+ 记录**没进主线**的能力与原因。
 > 课次编号见 `docs/curriculum.md`。**前置**：`lab-langgraph` 第 1–6、11 课。
-> 主线只留 3 课、3 个核心概念（待办 / 文件 / 子 agent）；下面是取舍记录。
+> 主线只留 4 课、4 个核心概念（待办 / 文件 / 沙箱 / 子 agent）；下面是取舍记录。
 
 ## 一、进主线
 
@@ -15,12 +15,14 @@
 | 虚拟文件系统 | 1 | 大产物写进文件，不塞进对话 |
 
 | backend：State / Filesystem / Composite | 1 | 默认在内存，路由到磁盘才落盘 |
-| backend：Store 跨会话 | 3 | 与 `store` 接入同一处讲，一句话带过 |
-| `virtualMode` 与路径约束 | 1 | 配 `rootDir` 必须开 |
-| Subagents（`task`） | 2 | 上下文隔离 + 权限收窄 |
-| 并行子 agent | 2 | 同一轮多个 `task`，并入第 2 课 |
-| checkpointer / Store / interrupt 接入 | 3 | 复用底层 LangGraph 能力 |
-| 选型判断（三条判断线） | 1、3 | 第 1 课延伸阅读 + 第 3 课收尾 |
+| backend：Store 跨会话 | 4 | 与 `store` 接入同一处讲，一句话带过 |
+| `virtualMode` 与路径约束 | 1、2 | 第 1 课讲文件工具，第 2 课讲它管不住命令 |
+| 沙箱后端与 `execute` | 2 | 单独成课：本机后端 → `BaseSandbox` 接容器 |
+| `timeout` / `maxOutputBytes` / `env` | 2 | 命令的时长、输出与环境约束 |
+| Subagents（`task`） | 3 | 上下文隔离 + 权限收窄 |
+| 并行子 agent | 3 | 同一轮多个 `task`，并入第 3 课 |
+| checkpointer / Store / interrupt 接入 | 4 | 复用底层 LangGraph 能力 |
+| 选型判断（三条判断线） | 1、4 | 第 1 课延伸阅读 + 第 4 课收尾 |
 
 ## 二、没进主线（原主线项，已回收）
 
@@ -28,9 +30,8 @@
 |---|---|---|
 | 「内置工具四件套」独立课 | 只是清单，不足以撑一课 | 第 1 课 concepts 与代码注释 |
 | 「Planning」独立课 | `write_todos` 一个工具讲不了整课 | 第 1 课 concepts + 打印待办清单 |
-| 「并行子 agent」独立课 | 与第 2 课同一机制，拆开是重复 | 第 2 课代码与 `Send` 注释 |
-| 「后端：文件存在哪」独立课 | 换 backend 是 LangGraph 的 store 能力，不是 Deep Agents 多出来的东西；单列一课等于重复第 1 课与第 3 课 | 第 1 课要点一句 + 第 3 课 `store` 接入 |
-| 「沙箱后端与 `execute`」 | 需要真实容器环境，与「长任务架构」主线无关 | 不进主线 |
+| 「并行子 agent」独立课 | 与第 3 课同一机制，拆开是重复 | 第 3 课代码与 `Send` 注释 |
+| 「后端：文件存在哪」独立课 | 换 backend 是 LangGraph 的 store 能力，不是 Deep Agents 多出来的东西；单列一课等于重复第 1 课与第 4 课 | 第 1 课要点一句 + 第 4 课 `store` 接入 |
 | 「中间件与摘要压缩」独立课 | 与第 1 课的文件外置是同一件事的两半，单列只剩一个中间件 | 不教；`README.md` 待办里留了思考模式冲突的记录 |
 | 「本地 Agent Server + Studio」 | 面试无比较优势，且要额外装 CLI | 不教；需要时按官方文档起服务 |
 | 「选型与评测」独立课 | 结论性内容，单独成课偏空 | 第 1 课延伸阅读的「什么时候不该用」 |
@@ -40,7 +41,7 @@
 | 项 | 原因 |
 |---|---|
 | 换成 JS 版（npm `deepagents`）重写全课 | 覆盖度未核实（见 `README.md` 待办）；官方主线是 Python |
-| Sandbox agents / 隔离工作区 | 需要真实容器环境，课程载体不匹配 |
+| 真容器沙箱的落地（Daytona / E2B / microVM） | 需要容器与云凭据，课程只讲 `BaseSandbox` 怎么接，不实跑 |
 | Realtime / Voice agents | 与「长任务架构」主题无关，属于另一条产品线 |
 | 平台侧能力（Agent Builder / 托管部署） | 属于产品操作，不是开发技能 |
 | Sandbox backend 集成（LangSmith / AgentCore / Daytona） | 需要容器与云凭据，不点名、不做集成 |

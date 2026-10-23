@@ -58,15 +58,16 @@ lab-deepagents/
 
 ## 学员项目的演进方式（覆盖式）
 
-学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`。3 课只覆盖两个脚本，不依赖外部语料。
+学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`。4 课只覆盖三个脚本，不依赖外部语料。
 
 ```text
 第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek + .env.local（DEEPSEEK_API_KEY）
 第 1 课  新建 src/minimal.ts：createDeepAgent + todoListMiddleware，跑一个需要拆解的任务
          默认 backend 在内存，示例用 CompositeBackend 把 /workspace/ 路由到磁盘
          第二个小节覆盖成只读 agent.graph 的节点与边（不发请求）
-第 2 课  新建 src/subagents.ts：两个子 agent（研究者 / 写作者），同一轮派多个 task 出去
-第 3 课  覆盖 src/subagents.ts：接 checkpointer + store + interruptOn（execute 前人工确认），用 Command 恢复
+第 2 课  新建 src/sandbox.ts：LocalShellBackend 指到运行目录，agent 执行命令统计文件行数
+第 3 课  新建 src/subagents.ts：两个子 agent（研究者 / 写作者），同一轮派多个 task 出去
+第 4 课  覆盖 src/subagents.ts：接 checkpointer + store + interruptOn（execute 前人工确认），用 Command 恢复
 ```
 
 ## 技术栈
@@ -90,10 +91,11 @@ pnpm dev          # 站点
 - [x] **待办工具差异**：TS 版默认不带 `write_todos`，需显式挂 `todoListMiddleware`（来自 `langchain`）
 - [x] **思考模式核实**：`deepseek-flash` 默认开思考模式且要求历史带回 `reasoning_content`；一旦摘要中间件改写历史，接口直接返回 400（`The reasoning_content in the thinking mode must be passed back`）。解法：`modelKwargs: { thinking: { type: "disabled" } }`（2026-10-23 实跑确认；课程主线不再演示摘要压缩，此条留作维护记录）
 - [x] **`getGraphAsync` 写法**：直接 `agent.getGraphAsync()` 的类型是 `never`（编译不过）；正确的是 `agent.graph.getGraphAsync()`，返回 `nodes` 是对象、`edges` 是数组（2026-10-22 实跑确认）
-- [ ] **第 1 课待实跑**：`CompositeBackend` + `FilesystemBackend`、`LocalShellBackend` 在 Windows 下的表现（课程用 `resolve()` 转绝对路径）
+- [x] **第 2 课沙箱已实跑**（2026-10-23）：`LocalShellBackend` + `virtualMode` + `timeout` + `maxOutputBytes`，agent 主动调用 `execute` 统计行数与字节数，产物留在沙箱目录；`isSandboxBackend` 对 LocalShell 为 `true`、对 `StoreBackend` 为 `false`
+- [ ] **第 2 课待实跑**：Windows 下 `LocalShellBackend` 的命令与路径表现（课程用 `resolve()` 转绝对路径）；`BaseSandbox` 接容器只讲思路，未实跑
 - [x] **后端直调**：`StoreBackend` 的 `write` / `read`、换实例读回，`LocalShellBackend` 的 `initialize` + `execute` 均已实跑通过（2026-10-22，零 token）
 - [x] **interruptOn 实跑核实**（2026-10-23）：形状为 `[{ id, value: { actionRequests: [{ name, args, description }], reviewConfigs: [{ actionName, allowedDecisions: ["approve","edit","reject","respond"] }] } }]`；恢复写法 `new Command({ resume: { decisions: [{ type: "approve" }] } })`，需同时给 `checkpointer` 与相同 `thread_id`
-- [ ] **第 2 课待核实**：并行子 agent 是否由主 agent 在同一轮返回多个 `task` 调用触发（对照 `langgraph` 的 `Send`）
+- [ ] **第 3 课待核实**：并行子 agent 是否由主 agent 在同一轮返回多个 `task` 调用触发（对照 `langgraph` 的 `Send`）
 - [ ] 站点脚手架（照抄 `lab-ai-sdk` 的 components / layout-classes）
 - [ ] 学员项目模板（每课「跟做」需要的最终代码）
 - [ ] 每课右侧 `docLinks` 全部校验可访问

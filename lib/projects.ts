@@ -578,34 +578,78 @@ console.log(
   },
   {
     kind: "project",
-    slug: "subagents",
-    title: "子 agent：隔离上下文与并行派发",
-    menuTitle: "子 agent",
+    slug: "sandbox",
+    title: "沙箱：让 agent 真的能跑命令",
+    menuTitle: "沙箱",
     summary:
-      "子 agent 的作用是隔离上下文与收窄权限：各自持有独立上下文，互不污染；互不依赖的子任务可以在同一轮并行派出。",
+      "文件工具只能读写，统计行数、跑脚本、转格式都得执行命令。`LocalShellBackend` 把文件限制在一个目录里，并给 agent 装上 `execute`。",
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
-        "打印子任务调用数与产出文件，同一轮里可以看到多个 task 调用",
+        "在 my-deepagents-app 目录执行 pnpm tsx src/sandbox.ts",
+        "终端先打印「用过 execute：true」，再打印 report.md 全文，末尾是命令算出的行数与字节数",
+        "最后两行对比：LocalShell 能执行命令为 true，Store 后端为 false",
       ],
     },
     concepts: [
-      { text: "`subagents` — createDeepAgent 的参数：声明可被派发任务的子 agent 列表" },
       {
-        text: "`SubAgent` — 子 agent 的规格类型：name、description、systemPrompt、tools",
+        text: "`LocalShellBackend` — 后端：文件限制在 `rootDir` 内，并给 agent 装上 `execute`",
+        note: "命令跑在宿主机上，没有隔离，仅开发用",
       },
-      { text: "`task` — 主 agent 派发任务的工具：把子任务连同上下文交给指定子 agent" },
+      {
+        text: "`virtualMode` — 只把文件工具的路径限制在根目录内，不约束命令能访问哪些文件",
+      },
+      {
+        text: "`timeout` / `maxOutputBytes` — 命令超时秒数与输出字节上限：超时被杀，超限截断",
+      },
+      {
+        text: "`isSandboxBackend` — 判断后端能否执行命令：为 true 时 agent 才有命令工具",
+      },
     ],
+    conceptArticle: {
+      title: "沙箱：从本机目录到真容器",
+      body: [
+        "## 为什么需要它",
+        "文件工具只能读写。要统计行数、跑脚本、跑构建、转图片格式，都得执行命令 —— 这是 agent 从「会写字」变成「会干活」的那一步。",
+        "## deepagents 怎么支持",
+        "`SandboxBackendProtocol` 在文件读写那组方法之外只多一个 `execute(command)`。backend 实现它，`isSandboxBackend()` 就是 `true`，文件系统中间件会把 `execute` 工具装进工具清单；不实现就只剩文件工具。",
+        "所以「agent 能不能跑命令」不是中间件开关，而是 backend 类型决定的。",
+        "## 本机后端的安全边界在哪",
+        "- `virtualMode` 只约束文件工具（`ls`、`read_file`、`write_file`），命令不受限：`cat /etc/hosts` 照样能读。",
+        "- `env` 只传必要变量（`PATH`、`HOME`），不把整个 `process.env` 带进去；要继承必须显式开 `inheritEnv`。",
+        "- `timeout` 杀掉跑太久的命令，`maxOutputBytes` 截断过长的输出，避免一次 `ls -R /` 把上下文塞满。",
+        "三条合起来说明：`LocalShellBackend` 是「有命令能力的开发后端」，不是安全边界。",
+        "## 真要隔离",
+        "- 继承 `BaseSandbox`，实现 `execute` 与文件上传下载，把命令丢进容器或 microVM；官方自带的具体实现是 `LangSmithSandbox`。",
+        "- 每次会话一个目录或一个容器，跑完回收；真实项目里常见做法是每次运行建一个 uuid 目录，结束时整目录删除。",
+        "- 沙箱里的产物要留到下一次，必须搬出去：先 `realpath` 解析软链，再校验路径前缀仍在沙箱内，加大小上限，最后上传对象存储。",
+        "## 最后两行在对照什么",
+        "默认后端是 `StateBackend`（不传 `backend` 时用它）：文件进图状态、跟 thread 走，也没有 `execute`。最后两行临时造一个 `StoreBackend` 实例 —— `store` 是它存文件的地方，`namespace` 是存哪一格 —— 再用同一个 `isSandboxBackend()` 判断，得到 `false`。结论只有一句：能不能执行命令，看后端有没有实现 `execute`。",
+        "## 面试会问到哪",
+        "- **隔离边界**：进程、容器、microVM 三档，命令直接跑在宿主机只能算开发环境。",
+        "- **限制维度**：超时、内存、输出字节、环境变量、网络出站。",
+        "- **生命周期**：每会话一个沙箱，谁创建、谁回收、复用还是重建。",
+        "- **危险操作**：把审批挂在 `execute` 上，执行前挂起，人批准后再跑。",
+      ],
+    },
     files: [
       {
-        path: "src/subagents.ts",
+        path: "src/sandbox.ts",
         order: 1,
         action: "create",
-        hint: "定义两个子 agent：一个负责查资料，一个负责写稿；任务拆成三路同时派出。",
-        code: `import { loadEnvFile } from "node:process";
+        hint: "一次运行一个目录：agent 写文件、执行命令统计、再把文件读回；末尾对比两个后端有没有 execute。",
+        code: `import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { loadEnvFile } from "node:process";
+
 import { ChatDeepSeek } from "@langchain/deepseek";
-import { type SubAgent, createDeepAgent } from "deepagents";
+import { InMemoryStore } from "@langchain/langgraph";
+import {
+  LocalShellBackend,
+  StoreBackend,
+  createDeepAgent,
+  isSandboxBackend,
+} from "deepagents";
 
 try {
   loadEnvFile(".env.local");
@@ -615,48 +659,191 @@ try {
 
 const model = new ChatDeepSeek({
   model: "deepseek-flash",
+  maxTokens: 3000,
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
-// ① 子 agent 各自的边界：做什么、能碰哪些工具
-const researcher: SubAgent = {
-  name: "researcher",
-  description: "只写被指定的那一部分，把要点写进独立文件",
-  systemPrompt: "只处理被指定的那一部分，产出独立的 notes 文件；不做总结陈词。",
-  tools: [],
-};
+// 每次运行一个独立目录：命令只允许在这个目录里干活
+const sandboxDir = resolve("workspace", "run-1");
+mkdirSync(sandboxDir, { recursive: true });
 
-const writer: SubAgent = {
-  name: "writer",
-  description: "只根据 notes 文件写出带出处的报告",
-  systemPrompt: "只依据 notes 文件写作，每个结论都标出来源文件。",
-  tools: [],
-};
+// LocalShellBackend = 文件工具 + execute
+// virtualMode 只约束文件工具（ls / read_file / write_file），不约束命令
+const backend = new LocalShellBackend({
+  rootDir: sandboxDir,
+  virtualMode: true,
+  timeout: 30,
+  maxOutputBytes: 20_000,
+  env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: sandboxDir },
+});
 
-// ② 主 agent 通过 task 派活：每个子 agent 有自己的上下文，只带该有的工具
 const agent = createDeepAgent({
   model,
   tools: [],
-  subagents: [researcher, writer],
+  backend,
 });
 
-// ③ 三部分互不依赖：模型会在同一轮里返回多个 task 调用，底层并行执行
 const result = await agent.invoke({
   messages: [
     {
       role: "user",
-      content: "分别写三种切块策略各一段说明（每段不超过 100 字），各存一份 notes 文件，最后合并成 report.md",
+      content:
+        "把「固定长度 / 按段落 / 按语义」三种切块策略各写一行到 /report.md；再统计这个文件有多少行、多少字节，把统计结果追加到文件末尾",
     },
   ],
 });
 
-// 同样先收窄再取：flatMap 里返回空数组表示这条消息没有工具调用
-const calls = result.messages.flatMap((message) => {
-  const raw = "tool_calls" in message ? message.tool_calls : undefined;
-  return Array.isArray(raw) ? raw : [];
+// 是否调用过命令
+const usedExecute = result.messages.some(
+  (message) =>
+    "tool_calls" in message &&
+    Array.isArray(message.tool_calls) &&
+    message.tool_calls.some((call) => call.name === "execute"),
+);
+console.log("用过 execute：", usedExecute);
+
+// 文件在沙箱目录里
+const file = await backend.read("/report.md");
+console.log("report.md 内容：");
+console.log(String(file.content));
+
+// 不传 backend 时默认用 StateBackend：文件进图状态、跟 thread 走，也没有 execute
+// 这里传的是 LocalShellBackend，所以 agent 才有命令工具
+// StoreBackend 不是默认值，只是另一种可选后端：把文件存进 store，namespace 决定存哪一格
+const store = new InMemoryStore();
+const storeBackend = new StoreBackend({ store, namespace: ["sandbox"] });
+
+// 同一个判断函数：LocalShell 有 execute 返回 true，Store 只有文件读写返回 false
+console.log("LocalShell 能执行命令：", isSandboxBackend(backend));
+console.log("Store 能执行命令：", isSandboxBackend(storeBackend));
+`,
+      },
+    ],
+    docLinks: [
+      {
+        title: "Deep Agents 后端",
+        href: "https://docs.langchain.com/oss/python/deepagents/backends",
+      },
+      {
+        title: "人在环",
+        href: "https://docs.langchain.com/oss/python/langgraph/interrupts",
+      },
+    ],
+  },
+  {
+    kind: "project",
+    slug: "subagents",
+    title: "子 agent：隔离上下文与并行派发",
+    menuTitle: "子 agent",
+    summary:
+      "查天气的工具只挂在两个子 agent 上，主 agent 自己没有：想拿到两个城市的天气，只能一次派两路出去，各自带回一句话，再合成建议。",
+    verify: {
+      label: "跑脚本看结果",
+      description: [
+        "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
+        "终端打印子任务调用数与「同一轮最多的 task 数」，后者为 2，说明两个城市同时开工",
+        "最后一行打印 /advice.md 的内容，正文里同时出现北京与上海的天气",
+      ],
+    },
+    concepts: [
+      { text: "`subagents` — createDeepAgent 的参数：声明可被派发任务的子 agent 列表" },
+      {
+        text: "`SubAgent` — 子 agent 的规格类型：name、description、systemPrompt、tools",
+      },
+      { text: "`task` — 主 agent 派发任务的工具：把子任务连同上下文交给指定子 agent" },
+      {
+        text: "`tool` — 定义工具：name、description、schema 决定模型怎么调用",
+        note: "两个检索工具只挂在子 agent 上，主 agent 没有",
+      },
+    ],
+    files: [
+      {
+        path: "src/subagents.ts",
+        order: 1,
+        action: "create",
+        hint: "一个 mock 天气工具只给两个子 agent，各查一个城市；主 agent 没这个工具，只能派活再合成建议。",
+        code: `import { loadEnvFile } from "node:process";
+
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { type SubAgent, createDeepAgent } from "deepagents";
+import { tool } from "langchain";
+
+// 脚本是裸 Node 进程，环境变量自己读
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+const model = new ChatDeepSeek({
+  model: "deepseek-flash",
+  maxTokens: 500,
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  // 短任务不需要思考链，关掉省掉每轮的推理 token
+  modelKwargs: { thinking: { type: "disabled" } },
 });
-console.log("子任务调用数：", calls.filter((call) => call.name === "task").length);
+
+// mock 数据：真实项目里换成天气接口
+const weatherOf: Record<string, string> = {
+  北京: "晴，18℃，北风 3 级",
+  上海: "小雨，22℃，东南风 2 级",
+};
+
+const getWeather = tool(
+  async ({ city }: { city: string }) => weatherOf[city] ?? "查不到这个城市",
+  {
+    name: "get_weather",
+    description: "查某个城市明天的天气",
+    schema: {
+      type: "object",
+      properties: { city: { type: "string", description: "城市名" } },
+      required: ["city"],
+    },
+  },
+);
+
+// 两个子 agent 用同一个工具，各自只管一个城市：并行查，互不干扰
+const beijingScout: SubAgent = {
+  name: "beijing-scout",
+  description: "只负责北京：查明天天气",
+  systemPrompt: "只查北京明天的天气，用一句话回给主 agent，不要写文件。",
+  tools: [getWeather],
+};
+
+const shanghaiScout: SubAgent = {
+  name: "shanghai-scout",
+  description: "只负责上海：查明天天气",
+  systemPrompt: "只查上海明天的天气，用一句话回给主 agent，不要写文件。",
+  tools: [getWeather],
+};
+
+// 主 agent 没有 get_weather：想知道天气，只能派活
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  subagents: [beijingScout, shanghaiScout],
+});
+
+const result = await agent.invoke({
+  messages: [
+    {
+      role: "user",
+      content: "比较北京和上海明天的天气，给一句出行建议写到 /advice.md",
+    },
+  ],
+});
+
+// 每条消息里有几个 task 调用：同一轮多个就是并行派发
+const perTurn = result.messages.map((message) => {
+  const raw = "tool_calls" in message ? message.tool_calls : undefined;
+  return Array.isArray(raw) ? raw.filter((call) => call.name === "task").length : 0;
+});
+
+console.log("子任务调用数：", perTurn.reduce((sum, n) => sum + n, 0));
+console.log("同一轮最多的 task 数：", Math.max(...perTurn));
 console.log("产出文件：", Object.keys(result.files ?? {}));
+// 默认后端不落盘：内容在 result.files 里，直接打出来看
+console.log("advice.md 内容：", result.files?.["/advice.md"]?.content);
 `,
       },
     ],
@@ -725,12 +912,14 @@ const workspace = resolve("workspace");
 mkdirSync(workspace, { recursive: true });
 
 // 接入点：checkpointer 管 thread 内续跑，store 管跨 thread 的长期记忆
-// 这个后端能执行命令，命令直接跑在宿主机上（能读系统文件、能删文件），所以每次都要人点头
+// 后端沿用沙箱课的最小写法：virtualMode 只把文件工具限制在 rootDir 内
+// 命令不受它约束（能读系统文件、能删文件），所以每次执行都要人点头
+// 沙箱课的 env / maxOutputBytes 与本课无关，这里不重复
 const agent = createDeepAgent({
   model,
   tools: [],
   checkpointer: new MemorySaver(),
-  backend: new LocalShellBackend({ rootDir: workspace }),
+  backend: new LocalShellBackend({ rootDir: workspace, virtualMode: true, timeout: 30 }),
   // 挂起粒度是工具调用：execute 被调用前停下，等人批准
   interruptOn: { execute: true },
 });
