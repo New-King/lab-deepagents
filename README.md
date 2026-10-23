@@ -36,7 +36,7 @@ Deep Agents（LangChain 的 `deepagents`）的课程站点，站点结构、UI �
 - **待办工具默认不启用**：Python 版默认带 `write_todos`，TS 版要显式挂 `todoListMiddleware`（来自 `langchain` 包）。
 - Python 与 TS 的行为差异已在本课示例中标注，遇到文档没写的边界情况先查类型定义。
 
-本课程不建自写前端：5 课全部用命令行脚本验证，需要看调用树时另起本地 Agent Server 即可（协议与前端 Hook 同一套）。
+第 1–3 课只用命令行脚本验证；第 4 课下半段给同一个项目加一个 Next 页面（`app/`），用 `useStream` 连本地 Agent Server，把审批做成页面上的按钮。不另建独立前端项目。
 
 ## 站点结构
 
@@ -58,7 +58,7 @@ lab-deepagents/
 
 ## 学员项目的演进方式（覆盖式）
 
-学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`。4 课只覆盖三个脚本，不依赖外部语料。
+学员维护一个 TypeScript 项目 `my-deepagents-app`：agent 在 `src/`，第 4 课加一个 `app/` 页面。不依赖外部语料。
 
 ```text
 第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek + .env.local（DEEPSEEK_API_KEY）
@@ -67,7 +67,7 @@ lab-deepagents/
          第二个小节覆盖成只读 agent.graph 的节点与边（不发请求）
 第 2 课  新建 src/sandbox.ts：LocalShellBackend 指到运行目录，agent 执行命令统计文件行数
 第 3 课  新建 src/subagents.ts：两个子 agent（研究者 / 写作者），同一轮派多个 task 出去
-第 4 课  覆盖 src/subagents.ts：接 checkpointer + store + interruptOn（execute 前人工确认），用 Command 恢复
+第 4 课  新建 src/agent.ts（checkpointer + interruptOn，execute 前人工确认）、langgraph.json（注册给本地 Agent Server）、app/layout.tsx、app/page.tsx（useStream 发消息 + 审批按钮）；覆盖 src/subagents.ts（脚本用 Command 验收挂起与恢复）与 package.json（dev 脚本）
 ```
 
 ## 技术栈
@@ -75,7 +75,7 @@ lab-deepagents/
 - 站点：Next.js（App Router）+ Tailwind + shiki（与 `lab-ai-sdk` 一致）
 - 课程主体：TypeScript + `deepagents`（基于 LangGraph）+ `langchain` + `@langchain/langgraph` + `@langchain/deepseek` + `tsx`
 - 模型：DeepSeek（`deepseek-flash`）—— 支持 Tool Calls，1M 上下文
-- 验证方式：每课一个可独立运行的 TS 脚本（`pnpm tsx src/xxx.ts`），不建前端
+- 验证方式：第 1–3 课每课一个可独立运行的 TS 脚本（`pnpm tsx src/xxx.ts`）；第 4 课脚本 + 本地 Agent Server（`pnpm exec langgraphjs dev`）+ Next 页面（`pnpm dev`）
 - 场景：**技术对比报告 agent** —— 给一个题目，多路子 agent 并行撰写 → 汇总 → 落成一份带依据的报告文件（材料由模型自己推断，不需要准备语料）
 
 ## 开发

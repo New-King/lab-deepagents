@@ -73,7 +73,8 @@ const lessons = marks.map((m) => {
             [...x[1].matchAll(/`([^`]+)`/g)].map((t) => t[1].split(/[\s—]/)[0]),
           ),
     verify: strArr(b, "description"),
-    install: g(/install: \{\s*\n?\s*command: "([^"]+)"/),
+    // command 可能换行写在下一行
+    install: g(/install: \{\s*command:\s*"([^"]+)"/),
     docLinks: [...b.matchAll(/href: "([^"]+)"/g)].map((x) => x[1]),
     files,
     code: codeOf(b),
@@ -143,7 +144,9 @@ for (const [k, v] of owner)
   if (v.length > 1) W(`\`${k}\` 在 ${v.length} 课重复列: ${v.join(", ")}`);
 
 // ---------- 5. 文件演进链 ----------
-const scaffolded = ["终端", ".env.local", "app/page.tsx", "app/layout.tsx", "app/globals.css", "next.config.ts"];
+// 本课程的学员项目是 pnpm init 建的裸 Node 项目，没有 Next 脚手架；
+// 前端（app/）在第 4 课才引入，所以这里不能预设 app/ 下任何文件
+const scaffolded = ["终端", ".env.local", "package.json", "tsconfig.json"];
 const known = new Set(scaffolded.map(norm));
 for (const l of projects) {
   // 扫整课原文（含 code / verify / hint / steps 命令），URL 先剔除
@@ -174,7 +177,8 @@ const initBlock = src.slice(src.indexOf("export const INIT_STEPS"), src.indexOf(
 const installed = new Set();
 const addCmds = [
   ...[...initBlock.matchAll(/(?:pnpm add|uv add|pip install)[^"`\n]*/g)].map((m) => m[0]),
-  ...lessons.map((l) => l.install).filter(Boolean),
+  // install 既可能是字符串，也可能是 { command, description }
+  ...lessons.map((l) => l.install?.command ?? l.install).filter(Boolean),
 ];
 for (const c of addCmds)
   for (const tok of String(c).split(/\s+/).slice(2))

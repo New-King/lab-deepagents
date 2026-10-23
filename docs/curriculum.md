@@ -14,7 +14,7 @@
 | 1 | 它是什么：createDeepAgent 默认装配了什么 | `createDeepAgent` `write_file` `read_file` `backend` `FilesystemBackend` `CompositeBackend` `invoke` `todoListMiddleware` `getGraphAsync` | `src/minimal.ts` |
 | 2 | 沙箱：让 agent 真的能跑命令 | `LocalShellBackend` `rootDir` `execute` `virtualMode` `timeout` `maxOutputBytes` `isSandboxBackend` | `src/sandbox.ts` |
 | 3 | 子 agent：隔离上下文与并行派发 | `subagents` `SubAgent` `task` `tool` | `src/subagents.ts` |
-| 4 | 记忆与审批：接入底层能力 | `checkpointer` `store` `interruptOn` `Command` | `src/subagents.ts` |
+| 4 | 记忆与审批：接入底层能力 | `checkpointer` `Command` `interruptOn` `langgraph.json` `langgraphjs` `useStream` `submit` `interrupt` | `src/agent.ts` `src/subagents.ts` `langgraph.json` `app/layout.tsx` `app/page.tsx` `package.json` |
 
 ---
 
@@ -46,11 +46,11 @@
 
 ### 第 4 课 · 记忆与审批：接入底层能力
 
-- **目标**：把 `lab-langgraph` 学过的三样接进 deep agent，并收尾选型
-- **示例**：`checkpointer`（同 thread 续跑）+ `store`（跨 thread 记忆）+ `interruptOn` 挂在 `execute` 上：执行命令前挂起，`Command({ resume })` 批准后继续
-- **要点**：三样都是底层 LangGraph 的能力，接入点是 `createDeepAgent` 的参数；挂起粒度是**工具调用**，不落在代码行；中断信息在 `result.__interrupt__` 里（工具名、参数、允许的决定）；**重跑幂等**依旧成立，恢复后节点整段重跑；审批最该挂在 `execute` 上 —— 它能读系统文件、删文件、外联
-- **验收**：终端打印被拦下的 `pwd` 命令与允许的决定；批准后命令执行，返回当前工作目录
-- **文档**：官方 Persistence / Human-in-the-loop 章节 + `lab-langgraph` 第 5、6、8 课
+- **目标**：把 `lab-langgraph` 学过的底层能力接进 deep agent，再把审批搬到网页上收尾
+- **示例**：agent 定义单独成 `src/agent.ts`（`checkpointer` + `interruptOn: { execute: true }`），脚本用 `Command({ resume })` 先验一遍；随后注册进 `langgraph.json`，Next 页面用 `useStream` 连本地 Agent Server，挂起时渲染审批卡，点批准即 `submit(null, { command: { resume: { decisions } } })`
+- **要点**：三样都是底层 LangGraph 的能力，接入点是 `createDeepAgent` 的参数；挂起粒度是**工具调用**，不落在代码行；中断信息在 `result.__interrupt__` 里（工具名、参数、允许的决定），网页侧拿到的是 `interrupt.value` 里的 `actionRequests` 与 `reviewConfigs`；`decisions` 顺序必须与 `actionRequests` 一一对应，恢复必须用同一个 thread；**重跑幂等**依旧成立，恢复后节点整段重跑；审批最该挂在 `execute` 上 —— 它能读系统文件、删文件、外联；`LocalShellBackend` 直接跑在宿主机，只适合本机开发
+- **验收**：终端 A 起 `langgraphjs dev`、终端 B 起 `pnpm dev`；页面里说「执行 pwd」会弹出审批卡，点批准后命令执行、结果回到对话里
+- **文档**：官方 Persistence / Human-in-the-loop / 前端接入（`useStream`）章节 + `lab-langgraph` 第 5、6、8 课
 
 ---
 
@@ -60,8 +60,9 @@
 |---|---|
 | 长任务怎么保证不跑偏 | 第 1 课（`write_todos` + `todoListMiddleware`） |
 | 上下文超长怎么办 | 第 1 课（`write_file` 把产物外置，不塞进对话） |
-| 产物存哪、怎么跨会话 | 第 1 课（`backend` 决定存哪）+ 第 4 课（`store` 让它跨会话） |
+| 产物存哪、怎么跨会话 | 第 1 课（`backend` 决定存哪；跨会话要 `store`，主线未展开） |
 | agent 怎么执行代码、隔离到哪一层 | 第 2 课（`LocalShellBackend` / `isSandboxBackend` / `BaseSandbox`） |
 | 多 agent 怎么协作、怎么隔离上下文 | 第 3 课（`subagents` / `task` / 并行） |
-| 记忆与人工审批怎么做 | 第 4 课（`checkpointer` / `store` / `interruptOn`） |
+| 记忆与人工审批怎么做 | 第 4 课（`checkpointer` / `interruptOn` / `Command`） |
+| 审批怎么落到网页上 | 第 4 课（`langgraph.json` / `useStream` / `interrupt`） |
 | 什么时候用预置 agent、什么时候自己画图 | 第 1 课延伸阅读 + 第 4 课收尾 |

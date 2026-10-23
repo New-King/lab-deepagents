@@ -864,38 +864,56 @@ console.log("advice.md 内容：", result.files?.["/advice.md"]?.content);
     title: "记忆与审批：接入底层能力",
     menuTitle: "记忆与审批",
     summary:
-      "checkpointer、Store、interrupt 都不是这一层新增的，而是底层图的能力。这一课把它们接入 deep agent，并在收尾给出判断：什么任务适合这套架构。",
+      "checkpointer 与 interrupt 都不是这一层新增的，而是底层图的能力。这一课把它们接入 deep agent，把审批搬到网页上，最后给出判断：什么任务适合这套架构。",
+    install: {
+      command:
+        "pnpm add next react react-dom @langchain/react && pnpm add -D @langchain/langgraph-cli @types/react @types/react-dom",
+      description:
+        "在 my-deepagents-app 目录执行：装 Next 与前端 Hook（本课要把审批搬到网页上），以及提供 langgraphjs 命令的 CLI。",
+    },
     verify: {
-      label: "跑脚本看结果",
+      label: "在网页上点批准",
       description: [
-        "在 my-deepagents-app 目录执行 pnpm tsx src/subagents.ts",
-        "执行命令前挂起，打印出被拦下的命令与参数；批准后命令执行并给出结果",
+        "终端 A 在 my-deepagents-app 目录执行 pnpm exec langgraphjs dev，本地 Agent Server 起在 http://localhost:2024",
+        "终端 B 执行 pnpm dev，打开 http://localhost:3000",
+        "发一句「执行 pwd」：页面弹出审批卡，点批准后命令执行，结果回到对话里",
       ],
     },
     concepts: [
       { text: "`checkpointer` — 按 thread 保存每一步状态，支持续跑与恢复" },
-      { text: "`store` — 跨 thread 的长期记忆，节点与工具都能读写" },
       { text: "`Command` — 从挂起处恢复执行：resume 携带批准或拒绝的决定" },
       {
         text: "`interruptOn` — 按工具名配置人工确认：调用前挂起，等人答复再继续",
         note: "必须同时给 checkpointer，否则无处保存挂起状态",
       },
+      {
+        text: "`langgraph.json` — 把图注册成服务上的名字：graphs 里写文件路径与导出名",
+        note: "这个名字就是前端的 assistantId",
+      },
+      { text: "`langgraphjs dev` — 起本地 Agent Server（默认 2024 端口），thread 与持久化都由它管" },
+      {
+        text: "`useStream` — React Hook：用 apiUrl 连服务、assistantId 指定图，拿到可直接渲染的消息与状态",
+      },
+      { text: "`submit` — 发一条新消息触发运行；带 command.resume 时改为恢复挂起的那次运行" },
+      {
+        text: "`interrupt` — 图挂起后前端拿到的载荷：actionRequests 是待批的工具调用，reviewConfigs 是允许的决定",
+      },
     ],
     files: [
       {
-        path: "src/subagents.ts",
+        path: "src/agent.ts",
         order: 1,
-        action: "replace",
-        hint: "覆盖成带审批的版本：后端换成能执行命令的，execute 调用前挂起，批准后继续。",
+        action: "create",
+        hint: "把 agent 的定义单独放进一个文件：脚本与 Agent Server 都从这里加载同一张图。",
         code: `import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 
 import { ChatDeepSeek } from "@langchain/deepseek";
-import { Command, MemorySaver } from "@langchain/langgraph";
+import { MemorySaver } from "@langchain/langgraph";
 import { LocalShellBackend, createDeepAgent } from "deepagents";
 
-// 脚本是裸 Node 进程，环境变量自己读
+// 裸 Node 进程，环境变量自己读
 try {
   loadEnvFile(".env.local");
 } catch {
@@ -911,11 +929,11 @@ const model = new ChatDeepSeek({
 const workspace = resolve("workspace");
 mkdirSync(workspace, { recursive: true });
 
-// 接入点：checkpointer 管 thread 内续跑，store 管跨 thread 的长期记忆
+// 这份定义同时给两处用：脚本直接 invoke，Agent Server 按 langgraph.json 加载
+// checkpointer 管 thread 内续跑；本地用内存版，托管部署时由平台换成持久化
 // 后端沿用沙箱课的最小写法：virtualMode 只把文件工具限制在 rootDir 内
 // 命令不受它约束（能读系统文件、能删文件），所以每次执行都要人点头
-// 沙箱课的 env / maxOutputBytes 与本课无关，这里不重复
-const agent = createDeepAgent({
+export const agent = createDeepAgent({
   model,
   tools: [],
   checkpointer: new MemorySaver(),
@@ -923,6 +941,16 @@ const agent = createDeepAgent({
   // 挂起粒度是工具调用：execute 被调用前停下，等人批准
   interruptOn: { execute: true },
 });
+`,
+      },
+      {
+        path: "src/subagents.ts",
+        order: 2,
+        action: "replace",
+        hint: "覆盖成纯脚本：只发一句命令、打印被拦下的审批、再批准续跑；agent 从上一个文件导入，不再重复定义。",
+        code: `import { Command } from "@langchain/langgraph";
+
+import { agent } from "./agent";
 
 const config = { configurable: { thread_id: "shell-1" } };
 
@@ -944,6 +972,148 @@ const resumed = await agent.invoke(
 console.log("命令结果：", String(resumed.messages.at(-1)?.content).slice(0, 120));
 `,
       },
+      {
+        path: "langgraph.json",
+        order: 3,
+        action: "create",
+        hint: "把 src/agent.ts 导出的图注册成名字叫 agent 的服务；这个文件要在项目根目录，env 指向已有的 .env.local。",
+        code: `{
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "./src/agent.ts:agent"
+  },
+  "env": ".env.local"
+}`,
+      },
+      {
+        path: "app/layout.tsx",
+        order: 4,
+        action: "create",
+        hint: "Next 的根布局：页面文件要靠它渲染，放在 app 目录里。",
+        code: `import type { ReactNode } from "react";
+
+export const metadata = { title: "Deep Agents 审批台" };
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="zh-CN">
+      <body style={{ margin: 0 }}>{children}</body>
+    </html>
+  );
+}`,
+      },
+      {
+        path: "app/page.tsx",
+        order: 5,
+        action: "create",
+        hint: "审批界面：连上 Agent Server 发消息并渲染回复；图挂起时弹出审批卡，点批准就用 command.resume 带着决定恢复同一次运行。",
+        code: `"use client";
+
+import { useState } from "react";
+import { useStream } from "@langchain/react";
+
+// 挂起载荷：待批的工具调用 + 每个工具允许哪些决定
+type Pending = {
+  actionRequests: { name: string; args: Record<string, unknown> }[];
+  reviewConfigs: { actionName: string; allowedDecisions: string[] }[];
+};
+
+export default function Home() {
+  const [input, setInput] = useState("");
+  // 连本地 Agent Server：地址是它的端口，名字是 langgraph.json 里注册的键
+  const stream = useStream({
+    apiUrl: "http://localhost:2024",
+    assistantId: "agent",
+  });
+
+  const pending = stream.interrupt?.value as Pending | undefined;
+
+  function send(text: string) {
+    if (!text.trim() || stream.isLoading) return;
+    stream.submit({ messages: [{ role: "user", content: text }] });
+    setInput("");
+  }
+
+  // 恢复挂起：decisions 的顺序必须与 actionRequests 一一对应
+  function decide(type: "approve" | "reject") {
+    stream.submit(null, {
+      command: {
+        resume: {
+          decisions:
+            type === "approve"
+              ? [{ type: "approve" }]
+              : [{ type: "reject", message: "不执行这条命令，也不要重试" }],
+        },
+      },
+    });
+  }
+
+  return (
+    <main style={{ maxWidth: 720, margin: "0 auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+      <h1 style={{ fontSize: 20 }}>Deep Agents 审批台</h1>
+
+      <div style={{ display: "grid", gap: 8, margin: "16px 0" }}>
+        {stream.messages.map((message) => (
+          <div key={message.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, fontSize: 14 }}>
+            <div style={{ color: "#888", fontSize: 12, marginBottom: 4 }}>{message.type}</div>
+            <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
+          </div>
+        ))}
+      </div>
+
+      {pending && (
+        <div style={{ border: "1px solid #f0c36d", background: "#fffaeb", borderRadius: 8, padding: 12, fontSize: 14 }}>
+          <div style={{ marginBottom: 8 }}>等待审批</div>
+          {pending.actionRequests.map((action, index) => (
+            <div key={index} style={{ marginBottom: 8 }}>
+              <div>工具：{action.name}</div>
+              <pre style={{ margin: "4px 0", whiteSpace: "pre-wrap" }}>{JSON.stringify(action.args)}</pre>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={() => decide("approve")}>
+              批准
+            </button>
+            <button type="button" onClick={() => decide("reject")}>
+              驳回
+            </button>
+          </div>
+        </div>
+      )}
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          send(input);
+        }}
+        style={{ display: "flex", gap: 8, marginTop: 16 }}
+      >
+        <input
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="让 agent 执行一条命令，例如 pwd"
+          style={{ flex: 1, padding: "8px 10px", fontSize: 14 }}
+        />
+        <button type="submit" disabled={stream.isLoading}>
+          发送
+        </button>
+        <button type="button" onClick={() => stream.stop()} disabled={!stream.isLoading}>
+          停止
+        </button>
+      </form>
+    </main>
+  );
+}`,
+      },
+      {
+        path: "package.json",
+        order: 6,
+        action: "edit",
+        hint: "加一个 dev 脚本用来起 Next（与 type 字段同级；首次 pnpm dev 时 Next 会自己补 tsconfig 里的 jsx 与 dom 配置，确认即可）。",
+        code: `"scripts": {
+  "dev": "next dev"
+},`,
+      },
     ],
     docLinks: [
       {
@@ -953,6 +1123,18 @@ console.log("命令结果：", String(resumed.messages.at(-1)?.content).slice(0,
       {
         title: "人在环",
         href: "https://docs.langchain.com/oss/python/langgraph/interrupts",
+      },
+      {
+        title: "Deep Agents 人工审批",
+        href: "https://docs.langchain.com/oss/python/deepagents/human-in-the-loop",
+      },
+      {
+        title: "前端接入（useStream）",
+        href: "https://docs.langchain.com/oss/javascript/deepagents/frontend/todo-list",
+      },
+      {
+        title: "useStream 参考",
+        href: "https://reference.langchain.com/javascript/langchain-react/index/useStream",
       },
     ],
   },

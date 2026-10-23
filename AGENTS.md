@@ -52,11 +52,11 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 | 1 | `src/minimal.ts` | — |
 | 2 | `src/sandbox.ts` | — |
 | 3 | `src/subagents.ts` | — |
-| 4 | — | `src/subagents.ts` |
+| 4 | `src/agent.ts` `langgraph.json` `app/layout.tsx` `app/page.tsx`（Next 页面） | `src/subagents.ts` `package.json`（加 `dev` 脚本） |
 
 禁止每课新建项目、新建平行目录。
 
-**这些课各讲什么**：第 1 课文件系统 + 待办（backend 只占一小节）、第 2 课沙箱与 `execute`、第 3 课子 agent 隔离、第 4 课记忆与审批。原「后端（文件存在哪）」独立课已删 —— 换 backend 属于 LangGraph 的 store 能力，一句话并入第 1 课，`store` 接入放第 4 课。沙箱单开一课的理由是它多出一项真实能力（`execute`）且有本机/容器两档取舍；Planning 与内置工具清单并入第 1 课，并行子 agent 并入第 3 课；摘要压缩不进主线（`README.md` 待办留有思考模式冲突的记录）。
+**这些课各讲什么**：第 1 课文件系统 + 待办（backend 只占一小节）、第 2 课沙箱与 `execute`、第 3 课子 agent 隔离、第 4 课记忆与审批。原「后端（文件存在哪）」独立课已删 —— 换 backend 属于 LangGraph 的 store 能力，一句话并入第 1 课；`store` 未进主线（示例未接）。第 4 课下半段把审批搬到网页：`src/agent.ts` 单独导出图、`langgraph.json` 注册给本地 Agent Server、Next 页面用 `useStream` 连它。沙箱单开一课的理由是它多出一项真实能力（`execute`）且有本机/容器两档取舍；Planning 与内置工具清单并入第 1 课，并行子 agent 并入第 3 课；摘要压缩不进主线（`README.md` 待办留有思考模式冲突的记录）。
 **每课的文件只包含本课要展示的内容**：后面课覆盖同一文件时，删掉本课用不到的子 agent、工具、中间件，不要为了「兼容前面课的脚本」而留着。
 
 ## 六、代码与依赖约定
@@ -67,7 +67,7 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`。
 - 依赖只加课程真需要的包：`deepagents`、`langchain`、`@langchain/langgraph`、`@langchain/deepseek`，外加开发依赖 `typescript` / `tsx` / `@types/node`。**不要**引入其它 provider 或云服务。
 - 跑脚本统一用 `pnpm tsx src/xxx.ts`：**不带任何参数**。
-- 不建自写前端、不起本地 Agent Server：5 课全用命令行脚本验证。
+- **第 1–3 课只用命令行脚本验证**；第 4 课下半段加一个 Next 页面（`app/`）接本地 Agent Server：agent 定义搬到 `src/agent.ts` 供 `langgraph.json` 注册，页面用 `useStream`，**不另建独立前端项目**。
 
 ## 七、写课约定
 
