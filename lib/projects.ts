@@ -18,6 +18,8 @@ export type ProjectFile = {
   order?: number;
   /** 项目课：新建（create）/ 整体覆盖（replace）/ 局部修改（edit）/ 只跑命令（run） */
   action?: FileAction;
+  /** 操作列表里的显示名，默认用文件名；同一个文件分两步改时用它区分 */
+  title?: string;
 };
 
 /**
@@ -159,7 +161,7 @@ export function getLabOperations(
       // 同一个文件可能分两步改，id 要带上 order
       id: `${file.path}@${file.order}`,
       order: order++,
-      label: getFileName(file.path),
+      label: file.title ?? getFileName(file.path),
       file,
     });
   }
@@ -344,25 +346,35 @@ export const NAV_ITEMS: NavItem[] = [
     title: "一行拿到配好的 agent：它默认给了什么",
     menuTitle: "它是什么",
     summary:
-      "手写版要自己接模型、接工具、写循环；这一课换成一行拿到配好的 agent，把默认行为看清楚 —— 文件工具与派活工具是自带的，待办要自己挂上去。",
+      "手写版要自己接模型、接工具、写循环；这一课换成一行拿到配好的 agent，把默认行为看清楚 —— 文件工具与派活工具是自带的，待办要自己挂上去，产物默认只在内存里，所以顺手把它路由到磁盘。",
     verify: {
       label: "跑脚本看结果",
       description: [
         "在 my-deepagents-app 目录执行 pnpm tsx src/minimal.ts",
-        "打印出每一步的工具调用与最终待办，能看到 write_todos 与写文件都被调用过",
+        "终端打印每轮的工具调用、最终待办与结束原因；workspace/report.md 出现在磁盘上，打开能看到报告正文",
+        "换成第二个小节的代码再跑一次：不发请求，只打印图里的节点与边",
       ],
     },
     concepts: [
       {
         text: "`createDeepAgent` — 拿到一个已配置好的 agent：模型、内置工具、系统提示都由它装好",
       },
+      {
+        text: "`backend` — 参数：文件最终写到哪；不传就用 StateBackend，跟着 thread 走、不落盘",
+      },
+      {
+        text: "`FilesystemBackend` — 写真实磁盘：rootDir 指目录，virtualMode 把路径限制在目录内",
+      },
+      {
+        text: "`CompositeBackend` — 按路径前缀分发：第一个参数是默认后端，第二个是路由表",
+      },
       { text: "`invoke` — 跑一次 agent，输入输出都是消息列表（底层就是 LangGraph 的图）" },
       {
         text: "`todoListMiddleware` — 待办中间件：装上才给 agent 待办工具，默认并不带",
       },
       {
-        text: "`write_todos` — 由中间件注册给模型调用的工具：每次调用整份替换待办清单",
-        note: "脚本里不 import 它，只在工具调用记录里出现",
+        text: "`getGraphAsync` — 从 agent.graph 上取底层图的节点与边：预置的只是一套配置",
+        note: "在 agent.graph 上调用，不发请求",
       },
     ],
     conceptArticle: {
@@ -371,6 +383,10 @@ export const NAV_ITEMS: NavItem[] = [
         "## 它是什么",
         "一个包，入口是 `createDeepAgent`。调用一次拿到的是一张「已经配好的图」：模型加工具循环的骨架、一段很长的系统提示、一组内置工具（待办、文件、子任务），以及上下文管理的中间件。",
         "骨架是固定的：只有「模型 ↔ 工具」这一个循环，没有画死的分支。具体走几步、调什么工具、要不要派子任务，全部由模型运行时决定。所谓「流程」不在图上的连线里，而在提示词、工具集与中间件诱导出的行为里。",
+        "## 文件默认存在哪",
+        "不传 `backend` 时用的是 `StateBackend`：文件是图状态里的一个字段，跟 thread 走，进程退出即失。所以示例把 `/workspace/` 路由到真实磁盘，跑完能在目录里打开产物。",
+        "默认后端仍留内存，是因为 agent 也会把内部产物（大工具结果、对话历史）写进文件系统；直接给磁盘会把这些混进项目目录，所以用 `CompositeBackend` 按路径分层。",
+        "两条硬规则：`rootDir` 给绝对路径；`virtualMode` 必须开，默认 `false` 时即使设了 `rootDir` 也不限制路径（`..`、`~`、绝对路径都能出界）。",
         "## 三层关系",
         "- **LangGraph**：引擎。图、状态、持久化、中断，都要自己画。",
         "- **deepagents**：引擎之上的预置架构。把「长任务该怎么组织」沉淀成默认值，图由它生成，仍能拿回来继续改。",
@@ -411,10 +427,18 @@ export const NAV_ITEMS: NavItem[] = [
         path: "src/minimal.ts",
         order: 1,
         action: "create",
-        hint: "最小示例：一个模型 + 一个任务，看默认行为与工具调用痕迹。",
-        code: `import { loadEnvFile } from "node:process";
+        hint: "最小示例：一个模型 + 一个任务，看默认行为与工具调用痕迹，产物顺手落到磁盘。",
+        code: `import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { loadEnvFile } from "node:process";
+
 import { ChatDeepSeek } from "@langchain/deepseek";
-import { createDeepAgent } from "deepagents";
+import {
+  CompositeBackend,
+  FilesystemBackend,
+  StateBackend,
+  createDeepAgent,
+} from "deepagents";
 import { todoListMiddleware } from "langchain";
 
 // 脚本是裸 Node 进程，环境变量自己读
@@ -426,46 +450,112 @@ try {
 
 const model = new ChatDeepSeek({
   model: "deepseek-flash",
-  // 单次输出上限：不设的话长任务容易一次写几千字，既慢又贵
-  maxTokens: 800,
+  // 单次输出上限：不设的话容易一次写几千字，既慢又贵
+  // 注意思考模式会占用输出预算，800 太小会把工具调用截断，这里留足
+  maxTokens: 2000,
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
 // 手写版要自己管模型调用、自己绑工具并执行、自己写循环；这里一行拿到配好的 agent
 // 默认自带：模型与工具循环、文件系统工具（write_file / read_file / ls）、
 // 以及有 subagents 时派活用的 task；待办不在默认配置里，要显式挂中间件
+// 默认 backend 是内存，文件只看得到名字、看不到实体
+// 把 /workspace/ 路由到真实磁盘：rootDir 要绝对路径，virtualMode 锁死路径范围
+const workspace = resolve("workspace");
+mkdirSync(workspace, { recursive: true });
+
 const agent = createDeepAgent({
   model,
   tools: [],
   middleware: [todoListMiddleware()],
+  backend: new CompositeBackend(new StateBackend(), {
+    "/workspace/": new FilesystemBackend({
+      rootDir: workspace,
+      virtualMode: true,
+    }),
+  }),
+  // 收尾格式属于 agent 配置，不写进任务里
+  // 工具用法不用在这里写：内置工具的 schema 自带说明（官方 FilesystemMiddleware 注释：默认省略，因为 tool schemas 已提供）
+  systemPrompt: [
+    "交付物一律产出为文件，不要在回答里复述正文。",
+    "完成后只回一句话，说明写到了哪个文件。",
+  ].join("\\n"),
 });
 
-// 任务必须真的需要拆解，待办清单才有意义
+// 任务只说「做什么」，不指定用哪个工具 —— 选工具是 agent 的职责
 const result = await agent.invoke({
   messages: [
     {
       role: "user",
       content:
-        "先列计划再动手：比较固定长度、按段落、按语义三种切块策略，写一份对比报告到 report.md，不超过 300 字，只写结论",
+        "比较固定长度、按段落、按语义三种切块策略，写一份对比报告到 /workspace/report.md，不超过 300 字，只写结论",
     },
   ],
 });
 
-// 内置工具在消息里留下痕迹：哪一步用了哪个工具、参数是什么
-// 只有 AI 消息带 tool_calls；先用 Array.isArray 做运行时收窄再取
-// （直接写 "tool_calls" in message 只会把类型收窄成 unknown，编译不过）
-for (const message of result.messages) {
+// 逐条打印消息：每一轮做了什么、调了哪个工具、说了什么
+for (const [index, message] of result.messages.entries()) {
   const calls = "tool_calls" in message ? message.tool_calls : undefined;
-  if (!Array.isArray(calls)) continue;
-  for (const call of calls) {
-    console.log(call.name, call.args);
-  }
+  const names = Array.isArray(calls) ? calls.map((call) => call.name) : [];
+  console.log(
+    "[" + index + "] " + message.type,
+    names.length > 0 ? "→ " + names.join(", ") : String(message.content).slice(0, 120),
+  );
 }
 
 // 待办是状态字段：每次调用 write_todos 都覆盖成最新一版
 console.log("最终待办：", result.todos);
 // 虚拟文件是另一个状态字段：路径 → 内容
 console.log("产出文件：", Object.keys(result.files ?? {}));
+
+// 结束原因最关键：length 代表被 maxTokens 截断，stop 代表模型自己认为说完了
+const last = result.messages[result.messages.length - 1];
+// response_metadata 的类型是 Partial<unknown>，要断言后才能取字段
+const meta = last.response_metadata as { finish_reason?: string } | undefined;
+console.log("结束原因：", meta?.finish_reason);
+console.log("最后一条：", last.content);
+`,
+      },
+      {
+        path: "src/minimal.ts",
+        order: 2,
+        action: "replace",
+        title: "看图结构",
+        hint: "覆盖成只看结构：不调用模型、不花 token，打印中间件插进来的节点与边。",
+        code: `import { loadEnvFile } from "node:process";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { createDeepAgent } from "deepagents";
+import { todoListMiddleware } from "langchain";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+const model = new ChatDeepSeek({
+  model: "deepseek-flash",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
+
+// 构造 agent 只是拼配置，不会发请求
+const agent = createDeepAgent({
+  model,
+  tools: [],
+  middleware: [todoListMiddleware()],
+});
+
+// 底层就是一张 LangGraph 图：从 agent.graph 上读结构，同样不发请求
+// nodes 是对象（键是节点名），能看到中间件把自己的节点也插了进来
+// 骨架始终是 model_request 与 tools 的循环，其余全是配置拼出来的
+const drawable = await agent.graph.getGraphAsync();
+console.log("节点：", Object.keys(drawable.nodes));
+console.log(
+  "边：",
+  drawable.edges.map(
+    (edge) => edge.source + " → " + edge.target + (edge.conditional ? "（条件）" : ""),
+  ),
+);
 `,
       },
     ],
@@ -521,7 +611,7 @@ try {
 
 const model = new ChatDeepSeek({
   model: "deepseek-flash",
-  maxTokens: 800,
+  maxTokens: 2000,
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
@@ -568,68 +658,58 @@ console.log(
   {
     kind: "project",
     slug: "backends",
-    title: "后端：文件到底存在哪",
+    title: "后端：换一种存法",
     menuTitle: "后端",
     summary:
-      "上一课只说了「写进文件」，没说文件存在哪。默认的 StateBackend 跟着 thread 活，脚本一结束就没了；要让产物落到真实磁盘，得换 backend。",
+      "上一课已经把 /workspace/ 路由到磁盘。这一课往后退一层：backend 只是一个实现了文件操作接口的对象，换成 Store 就能跨 thread 取回，换成 shell 后端还能执行命令。",
     verify: {
       label: "跑脚本看结果",
       description: [
         "在 my-deepagents-app 目录执行 pnpm tsx src/backends.ts",
-        "workspace/ 目录下出现 notes.md，状态里只剩内部产物，两者分开存放",
+        "终端打印 Store 里读回的笔记、换新实例后仍读得到，以及 shell 命令的输出",
+        "整个过程不调用模型，只验证 backend 这一层",
       ],
     },
     concepts: [
-      { text: "`backend` — createDeepAgent 的参数：文件工具最终写到哪，由它决定" },
-      { text: "`StateBackend` — 默认后端：文件存在图状态里，跟 thread 走，不落盘" },
       {
-        text: "`FilesystemBackend` — 读写真实磁盘：rootDir 指目录，virtualMode 把路径限制在目录内",
-      },
-      {
-        text: "`CompositeBackend` — 按路径前缀分发：第一个参数是默认后端，第二个是路由表",
-      },
-      { text: "`virtualMode` — 路径沙箱开关：默认 false 等于没有保护，配 rootDir 必须开" },
-      {
-        text: "`StoreBackend` — 把文件存进 Store：跨 thread 持久，适合长期记忆",
+        text: "`StoreBackend` — 把文件存进 Store：换 thread、换 agent 实例都还在",
         note: "需要同时给 createDeepAgent 传 store",
       },
       {
-        text: "`LocalShellBackend` — 本地 shell 后端：能执行命令，但没有隔离，只适合开发",
+        text: "`namespace` — StoreBackend 的隔离键：不同用户、不同项目各存一格",
+        note: "多用户时必须显式给，否则所有人共用一份",
+      },
+      {
+        text: "`LocalShellBackend` — 带执行能力的本地后端：文件读写照旧，多出 execute",
       },
       {
         text: "`SandboxBackendProtocol` — 沙箱后端协议：实现后自动多出 execute 工具",
         note: "在隔离环境里跑命令，生产环境用",
       },
       {
-        text: "`BackendProtocol` — 后端要实现的接口：ls、readFile、writeFile、editFile、glob、grep",
+        text: "`BackendProtocol` — 后端要实现的接口：ls、read、write、edit、glob、grep",
         note: "可选 execute；实现这套方法即可自接入",
-      },
-      {
-        text: "`namespace` — StoreBackend 的隔离键：不同用户、不同项目各存一格",
-        note: "多用户时必须显式给，否则所有人共用一份",
       },
     ],
     conceptArticle: {
-      title: "Backend 怎么选：四种存法、三条硬规则",
+      title: "Backend 怎么选：四种存法对照",
       body: [
         "## 它是什么",
-        "backend 是一个**对象**，实现一组文件操作方法：`ls`、`readFile`、`writeFile`、`editFile`、`glob`、`grep`，可选 `execute`。agent 的文件工具（`read_file`、`write_file` 等）只是把调用转发给它。",
+        "backend 是一个**对象**，实现一组文件操作方法：`ls`、`read`、`write`、`edit`、`glob`、`grep`，可选 `execute`。agent 的文件工具（`read_file`、`write_file` 等）只是把调用转发给它。",
         "所以换 backend 不是「改个开关」，是换掉整套「文件怎么存取」的实现。模型对此无感：它只知道路径，不知道背后是内存、磁盘还是数据库。",
-        "## 四种现成的",
+        "## 四种存法",
         "| 后端 | 存哪 | 活着多久 | 适合 |",
         "|---|---|---|---|",
         "| `StateBackend` | 图状态（内存） | 跟 thread 走，进程退出即失 | 演示、临时产物 |",
         "| `FilesystemBackend` | 真实磁盘目录 | 一直在 | 本地工具、单机 |",
-        "| `StoreBackend` | LangGraph Store（内存 / Postgres） | 跨 thread、跨重启 | 用户文件、长期记忆 |",
+        "| `StoreBackend` | LangGraph Store（内存 / Postgres） | 看 store 实现；接数据库才跨重启 | 用户文件、长期记忆 |",
         "| `LocalShellBackend` / 沙箱后端 | 磁盘或容器，并多出 `execute` | 看实现 | 需要跑命令 |",
-        "## 三条硬规则",
-        "1. **`rootDir` 必须给绝对路径**：官方文档明确要求，相对路径行为不确定。",
-        "2. **`virtualMode` 必须开**：默认 `false` 时即使设了 `rootDir`，也不限制路径（`..`、`~`、绝对路径都能出界）。",
-        "3. **大多数场景用 `CompositeBackend` 包住**：agent 会把内部产物（大工具结果、对话历史）也写进 backend，直接给磁盘会把这些东西混进项目目录。",
         "## 什么时候要自己写",
         "文件要进自家对象存储或自建表结构，**并且**需要像文件系统一样增删查改时，才实现 `BackendProtocol`。只是偶尔上传一个产物，写成普通工具更划算。",
         "## 多用户隔离",
-        "`StoreBackend` 的 `namespace` 决定「存哪一格」。多用户、多项目场景必须显式给出，否则所有用户共用同一份存储——这是官方文档专门警告过的点。",
+        "`StoreBackend` 的 `namespace` 决定「存哪一格」。多用户、多项目场景必须显式给出，否则所有用户共用同一份存储——这是官方文档特别警告过的点。",
+        "## 一个容易忽略的点",
+        "`InMemoryStore` 只活在这个进程里。换成 Postgres 之类的 store 实现，文件才真正跨重启；这一点和 backend 的选择是两件事。",
       ],
     },
     files: [
@@ -637,66 +717,44 @@ console.log(
         path: "src/backends.ts",
         order: 1,
         action: "create",
-        hint: "换成 CompositeBackend：工作区落真实磁盘，内部产物留在状态里。",
-        code: `import { mkdirSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { loadEnvFile } from "node:process";
+        hint: "不跑模型：直接对两个 backend 写读，看文件落在 Store 还是磁盘、命令能不能执行。",
+        code: `import { resolve } from "node:path";
 
-import { ChatDeepSeek } from "@langchain/deepseek";
-import {
-  CompositeBackend,
-  FilesystemBackend,
-  StateBackend,
-  createDeepAgent,
-} from "deepagents";
+import { InMemoryStore } from "@langchain/langgraph";
+import { LocalShellBackend, StoreBackend } from "deepagents";
 
-try {
-  loadEnvFile(".env.local");
-} catch {
-  // 没有 .env.local 时忽略
-}
+// 这一课不经过模型：直接调 backend 的方法，把「文件到底存在哪」单独看清
+// Store 是 LangGraph 的长期存储：进程内用 InMemoryStore，接数据库换成 Postgres 实现
+const store = new InMemoryStore();
 
-const model = new ChatDeepSeek({
-  model: "deepseek-flash",
-  apiKey: process.env.DEEPSEEK_API_KEY,
+// 文件存进 Store：namespace 决定存哪一格，多用户场景一个用户一格
+const storeBackend = new StoreBackend({
+  store,
+  namespace: ["reports", "user-1"],
 });
 
-// 不传 backend 时用的就是 StateBackend：文件存在图状态里，换了 thread 或重启就没了
-// 要让产物真正落盘，换 FilesystemBackend；rootDir 用绝对路径，virtualMode 才做路径约束
-const workspace = resolve("workspace");
-mkdirSync(workspace, { recursive: true });
+// write / read 就是 agent 的文件工具最终调用的方法
+const written = await storeBackend.write("/notes.md", "三种切块策略的要点");
+console.log("写入：", written);
 
-const agent = createDeepAgent({
-  model,
-  tools: [],
-  // 为什么不直接把 FilesystemBackend 丢给 agent：
-  // agent 还会把内部产物（大工具结果、对话历史）写进 backend，
-  // 这些不该混进项目目录，所以默认后端留 StateBackend，只把 /workspace/ 路由到磁盘
-  backend: new CompositeBackend(new StateBackend(), {
-    "/workspace/": new FilesystemBackend({
-      rootDir: workspace,
-      virtualMode: true,
-    }),
-  }),
-});
+const read = await storeBackend.read("/notes.md");
+console.log("读回：", read.content);
 
-const result = await agent.invoke({
-  messages: [
-    { role: "user", content: "把三种切块策略的要点整理成笔记，写进 /workspace/notes.md" },
-  ],
-});
+// 换一个 backend 实例、同一个 store 与 namespace：文件还在，因为它不在实例里
+// 接回 agent 时把这个实例传进去：createDeepAgent({ model, store, backend: storeBackend })
+const again = new StoreBackend({ store, namespace: ["reports", "user-1"] });
+const reread = await again.read("/notes.md");
+console.log("新实例读回：", reread.content);
 
-// 状态里剩下的只是内部产物；真正的笔记已经写到磁盘
-console.log("状态里的文件：", Object.keys(result.files ?? {}));
-console.log("磁盘上的文件：", readdirSync(workspace));
+// 需要执行命令时换 LocalShellBackend：文件读写照旧，多出 execute
+// 命令能碰到宿主机的任意路径，没有隔离，只适合本地开发
+// 生产用实现 SandboxBackendProtocol 的沙箱后端：工具集会自动多出 execute 工具
+const shell = new LocalShellBackend({ rootDir: resolve("workspace") });
+await shell.initialize();
+const out = await shell.execute("echo hello");
+console.log("命令输出：", out.output, "退出码：", out.exitCode);
 
-// backend 只要满足 BackendProtocol（ls / readFile / writeFile / grep …）就能插进来
-// 跨 thread 的长期记忆换成 StoreBackend：new StoreBackend({ namespace }) + 传 store
-
-// 需要 agent 执行命令时，把默认后端换成 LocalShellBackend：能跑 shell，
-// 但没有隔离（命令能碰到宿主机的任意路径），只适合本地开发
-// 生产用实现 SandboxBackendProtocol 的沙箱后端：工具集会自动多出 execute，
-// 命令在隔离环境里跑，搞坏了也波及不到宿主机
+// 想接自家对象存储：实现 BackendProtocol 的那组方法即可，无需改 agent
 `,
       },
     ],

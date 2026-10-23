@@ -63,9 +63,10 @@ lab-deepagents/
 ```text
 第 0 课  pnpm init（type=module）+ pnpm add deepagents langchain @langchain/langgraph @langchain/deepseek + .env.local（DEEPSEEK_API_KEY）
 第 1 课  新建 src/minimal.ts：createDeepAgent + todoListMiddleware，跑一个需要拆解的任务
-         （对照 lab-langgraph 第 4 课手写的 llmCall / toolNode / route 三件套）
-第 2 课  覆盖 src/minimal.ts：产物写进虚拟文件、只读回需要的片段
-第 3 课  新建 src/backends.ts：换 backend —— CompositeBackend 把 /workspace/ 路由到磁盘，内部产物留状态
+         默认 backend 在内存，示例用 CompositeBackend 把 /workspace/ 路由到磁盘
+         第二个小节覆盖成只读 agent.graph 的节点与边（不发请求）
+第 2 课  覆盖 src/minimal.ts：回到默认内存 backend，产物写进虚拟文件、只读回需要的片段
+第 3 课  新建 src/backends.ts：不跑模型，直接对 StoreBackend 写读、跑 LocalShellBackend 的 execute
 第 4 课  新建 src/subagents.ts：两个子 agent（研究者 / 写作者），同一轮派多个 task 出去
 第 5 课  覆盖 src/subagents.ts：接 checkpointer + store + interruptOn（写文件前人工确认）
 ```
@@ -90,7 +91,9 @@ pnpm dev          # 站点
 - [x] **TS 版 API 核实**：`deepagents@1.15.1` 类型定义已核对 —— `createDeepAgent` 参数、`StateBackend` / `FilesystemBackend` / `CompositeBackend` / `StoreBackend` 构造、`SubAgent` 字段、`interruptOn`、`files` 状态字段
 - [x] **待办工具差异**：TS 版默认不带 `write_todos`，需显式挂 `todoListMiddleware`（来自 `langchain`）
 - [ ] **思考模式核实**：`deepseek-flash` 默认开思考模式，多轮工具调用时 reasoning 是否需回传、`ChatDeepSeek` 是否自动处理 —— 实跑确认，必要时在课里加一行开关说明
-- [ ] **第 3 课实跑核实**：`CompositeBackend` + `FilesystemBackend` 在 Windows 与相对 rootDir 下的表现（课程用 `resolve()` 转绝对路径）
+- [x] **`getGraphAsync` 写法**：直接 `agent.getGraphAsync()` 的类型是 `never`（编译不过）；正确的是 `agent.graph.getGraphAsync()`，返回 `nodes` 是对象、`edges` 是数组（2026-10-22 实跑确认）
+- [ ] **第 3 课待实跑**：`CompositeBackend` + `FilesystemBackend`、`LocalShellBackend` 在 Windows 下的表现（课程用 `resolve()` 转绝对路径）
+- [x] **第 3 课后端直调**：`StoreBackend` 的 `write` / `read`、换实例读回，`LocalShellBackend` 的 `initialize` + `execute` 均已实跑通过（2026-10-22，零 token）
 - [ ] **第 5 课实跑核实**：`interruptOn` 挂起后 `result.__interrupt__` 的实际形状，以及 `Command({ resume })` 的恢复写法
 - [ ] **第 4 课待核实**：并行子 agent 是否由主 agent 在同一轮返回多个 `task` 调用触发（对照 `langgraph` 的 `Send`）
 - [ ] 站点脚手架（照抄 `lab-ai-sdk` 的 components / layout-classes）

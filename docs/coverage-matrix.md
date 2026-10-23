@@ -14,7 +14,8 @@
 | `recursion_limit` 与成本控制 | 1 | 步数上限，放在第 1 课的调用里 |
 | 虚拟文件系统 | 2 | 大产物不进上下文 |
 | 中间件与摘要/上下文管理 | 2 | 上下文压缩，并入第 2 课 |
-| backend：State / Filesystem / Store / Composite | 3 | 文件实存哪、活多久 |
+| backend：State / Filesystem / Composite | 1 | 默认在内存，路由到磁盘才落盘 |
+| backend：Store / Shell / 自接入 | 3 | 换一种存法，看文件活多久 |
 | `virtualMode` 与路径约束 | 3 | 配 `rootDir` 必须开 |
 | 沙箱后端与 `execute` 工具 | 3 | 只讲协议与取舍，不接云厂商 |
 | Subagents（`task`） | 4 | 上下文隔离 + 权限收窄 |
