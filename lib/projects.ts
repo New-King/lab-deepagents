@@ -877,14 +877,14 @@ console.log("advice.md 内容：", result.files?.["/advice.md"]?.content);
         "终端 A 在 my-deepagents-app 目录执行 pnpm exec langgraphjs dev，本地 Agent Server 起在 http://localhost:2024",
         "终端 B 执行 pnpm dev，打开 http://localhost:3000",
         "发一句「执行 pwd」：页面弹出审批卡，点批准后命令执行，结果回到对话里",
+        "让它写一个文件也一样先挂起，批准后才落进 workspace/ 目录",
       ],
     },
     concepts: [
       { text: "`checkpointer` — 按 thread 保存每一步状态，支持续跑与恢复" },
-      { text: "`Command` — 从挂起处恢复执行：resume 携带批准或拒绝的决定" },
       {
-        text: "`interruptOn` — 按工具名配置人工确认：调用前挂起，等人答复再继续",
-        note: "必须同时给 checkpointer，否则无处保存挂起状态",
+        text: "`interruptOn` — 按工具名逐个开人工确认：名单里的工具在调用前挂起，等人答复再继续",
+        note: "必须同时给 checkpointer；写文件与执行命令要分别列进去",
       },
       {
         text: "`langgraph.json` — 把图注册成服务上的名字：graphs 里写文件路径与导出名",
@@ -894,9 +894,13 @@ console.log("advice.md 内容：", result.files?.["/advice.md"]?.content);
       {
         text: "`useStream` — React Hook：用 apiUrl 连服务、assistantId 指定图，拿到可直接渲染的消息与状态",
       },
-      { text: "`submit` — 发一条新消息触发运行；带 command.resume 时改为恢复挂起的那次运行" },
+      { text: "`submit` — 往当前 thread 发一条新消息，触发一次运行" },
       {
         text: "`interrupt` — 图挂起后前端拿到的载荷：actionRequests 是待批的工具调用，reviewConfigs 是允许的决定",
+      },
+      {
+        text: "`respond` — 回答挂起的 interrupt：参数作为 resume 值交回图，批准或拒绝都在这里传",
+        note: "submit 不带 resume；恢复只能走 respond",
       },
     ],
     files: [
@@ -904,7 +908,7 @@ console.log("advice.md 内容：", result.files?.["/advice.md"]?.content);
         path: "src/agent.ts",
         order: 1,
         action: "create",
-        hint: "把 agent 的定义单独放进一个文件：脚本与 Agent Server 都从这里加载同一张图。",
+        hint: "这个文件只做一件事：把图建好并导出，交给 Agent Server 按 langgraph.json 加载；命令执行与写文件都列进审批名单。",
         code: `import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
@@ -913,7 +917,7 @@ import { ChatDeepSeek } from "@langchain/deepseek";
 import { MemorySaver } from "@langchain/langgraph";
 import { LocalShellBackend, createDeepAgent } from "deepagents";
 
-// 裸 Node 进程，环境变量自己读
+// Agent Server 加载这个文件时是普通 Node 进程，Key 从 .env.local 读
 try {
   loadEnvFile(".env.local");
 } catch {
@@ -929,7 +933,8 @@ const model = new ChatDeepSeek({
 const workspace = resolve("workspace");
 mkdirSync(workspace, { recursive: true });
 
-// 这份定义同时给两处用：脚本直接 invoke，Agent Server 按 langgraph.json 加载
+// 这个导出是给 Agent Server 用的：langgraph.json 按路径加导出名加载它
+// 前端不 import 这个文件，只用 assistantId 这个名字连过来
 // checkpointer 管 thread 内续跑；本地用内存版，托管部署时由平台换成持久化
 // 后端沿用沙箱课的最小写法：virtualMode 只把文件工具限制在 rootDir 内
 // 命令不受它约束（能读系统文件、能删文件），所以每次执行都要人点头
@@ -938,43 +943,15 @@ export const agent = createDeepAgent({
   tools: [],
   checkpointer: new MemorySaver(),
   backend: new LocalShellBackend({ rootDir: workspace, virtualMode: true, timeout: 30 }),
-  // 挂起粒度是工具调用：execute 被调用前停下，等人批准
-  interruptOn: { execute: true },
+  // 挂起粒度是工具调用：名单里的工具在调用前停下，等人批准
+  // 执行命令会碰宿主机，写文件会改磁盘上的产物，两样都拦
+  interruptOn: { execute: true, write_file: true, edit_file: true },
 });
 `,
       },
       {
-        path: "src/subagents.ts",
-        order: 2,
-        action: "replace",
-        hint: "覆盖成纯脚本：只发一句命令、打印被拦下的审批、再批准续跑；agent 从上一个文件导入，不再重复定义。",
-        code: `import { Command } from "@langchain/langgraph";
-
-import { agent } from "./agent";
-
-const config = { configurable: { thread_id: "shell-1" } };
-
-const first = await agent.invoke(
-  { messages: [{ role: "user", content: "执行 pwd，汇报当前工作目录" }] },
-  config,
-);
-
-// 中断信息在 __interrupt__ 里：被拦下的工具名、参数，以及允许的决定
-console.log("待批准：", JSON.stringify(first.__interrupt__));
-
-// 批准后继续：resume 携带决定，图从被拦下的位置接着跑
-const resumed = await agent.invoke(
-  new Command({ resume: { decisions: [{ type: "approve" }] } }),
-  config,
-);
-
-// 挂起恢复后节点会整段重跑：发通知、扣款这类动作必须可重复执行
-console.log("命令结果：", String(resumed.messages.at(-1)?.content).slice(0, 120));
-`,
-      },
-      {
         path: "langgraph.json",
-        order: 3,
+        order: 2,
         action: "create",
         hint: "把 src/agent.ts 导出的图注册成名字叫 agent 的服务；这个文件要在项目根目录，env 指向已有的 .env.local。",
         code: `{
@@ -987,7 +964,7 @@ console.log("命令结果：", String(resumed.messages.at(-1)?.content).slice(0,
       },
       {
         path: "app/layout.tsx",
-        order: 4,
+        order: 3,
         action: "create",
         hint: "Next 的根布局：页面文件要靠它渲染，放在 app 目录里。",
         code: `import type { ReactNode } from "react";
@@ -1004,7 +981,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       },
       {
         path: "app/page.tsx",
-        order: 5,
+        order: 4,
         action: "create",
         hint: "审批界面：连上 Agent Server 发消息并渲染回复；图挂起时弹出审批卡，点批准就用 command.resume 带着决定恢复同一次运行。",
         code: `"use client";
@@ -1034,17 +1011,14 @@ export default function Home() {
     setInput("");
   }
 
-  // 恢复挂起：decisions 的顺序必须与 actionRequests 一一对应
+  // 恢复挂起：respond 的参数会作为 resume 值交回图
+  // decisions 的顺序必须与 actionRequests 一一对应
   function decide(type: "approve" | "reject") {
-    stream.submit(null, {
-      command: {
-        resume: {
-          decisions:
-            type === "approve"
-              ? [{ type: "approve" }]
-              : [{ type: "reject", message: "不执行这条命令，也不要重试" }],
-        },
-      },
+    void stream.respond({
+      decisions:
+        type === "approve"
+          ? [{ type: "approve" }]
+          : [{ type: "reject", message: "不执行这条命令，也不要重试" }],
     });
   }
 
@@ -1107,7 +1081,7 @@ export default function Home() {
       },
       {
         path: "package.json",
-        order: 6,
+        order: 5,
         action: "edit",
         hint: "加一个 dev 脚本用来起 Next（与 type 字段同级；首次 pnpm dev 时 Next 会自己补 tsconfig 里的 jsx 与 dom 配置，确认即可）。",
         code: `"scripts": {

@@ -67,7 +67,7 @@ lab-deepagents/
          第二个小节覆盖成只读 agent.graph 的节点与边（不发请求）
 第 2 课  新建 src/sandbox.ts：LocalShellBackend 指到运行目录，agent 执行命令统计文件行数
 第 3 课  新建 src/subagents.ts：两个子 agent（研究者 / 写作者），同一轮派多个 task 出去
-第 4 课  新建 src/agent.ts（checkpointer + interruptOn，execute 前人工确认）、langgraph.json（注册给本地 Agent Server）、app/layout.tsx、app/page.tsx（useStream 发消息 + 审批按钮）；覆盖 src/subagents.ts（脚本用 Command 验收挂起与恢复）与 package.json（dev 脚本）
+第 4 课  新建 src/agent.ts（checkpointer + interruptOn，execute 与写文件前人工确认）、langgraph.json（注册给本地 Agent Server）、app/layout.tsx、app/page.tsx（useStream 发消息 + 审批按钮）；覆盖 package.json（dev 脚本）
 ```
 
 ## 技术栈

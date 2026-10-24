@@ -52,7 +52,7 @@ Deep Agents 课程（lab-deepagents）的约定。改这个仓库前先读本文
 | 1 | `src/minimal.ts` | — |
 | 2 | `src/sandbox.ts` | — |
 | 3 | `src/subagents.ts` | — |
-| 4 | `src/agent.ts` `langgraph.json` `app/layout.tsx` `app/page.tsx`（Next 页面） | `src/subagents.ts` `package.json`（加 `dev` 脚本） |
+| 4 | `src/agent.ts` `langgraph.json` `app/layout.tsx` `app/page.tsx`（Next 页面） | `package.json`（加 `dev` 脚本） |
 
 禁止每课新建项目、新建平行目录。
 
